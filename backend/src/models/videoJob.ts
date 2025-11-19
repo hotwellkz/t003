@@ -22,23 +22,36 @@ export interface VideoJob {
   webViewLink?: string;
   webContentLink?: string;
   errorMessage?: string; // Сообщение об ошибке
+  telegramRequestMessageId?: number; // ID сообщения, отправленного в Telegram (для связи с ответом)
   createdAt: number;
   updatedAt: number; // Время последнего обновления
 }
-
-const videoJobs = new Map<string, VideoJob>();
 
 function generateJobId(): string {
   return `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-export function createJob(
+// Импортируем функции из Firebase сервиса
+import {
+  createJob as createJobInFirestore,
+  getJob as getJobFromFirestore,
+  updateJob as updateJobInFirestore,
+  deleteJob as deleteJobFromFirestore,
+  getAllJobs as getAllJobsFromFirestore,
+  getActiveJobs as getActiveJobsFromFirestore,
+  countActiveJobs as countActiveJobsFromFirestore,
+} from "../firebase/videoJobsService";
+
+/**
+ * Создать задачу (обёртка для совместимости)
+ */
+export async function createJob(
   prompt: string,
   channelId?: string,
   channelName?: string,
   ideaText?: string,
   videoTitle?: string
-): VideoJob {
+): Promise<VideoJob> {
   const now = Date.now();
   const job: VideoJob = {
     id: generateJobId(),
@@ -51,53 +64,14 @@ export function createJob(
     createdAt: now,
     updatedAt: now,
   };
-  videoJobs.set(job.id, job);
-  return job;
+  return await createJobInFirestore(job);
 }
 
-export function getJob(id: string): VideoJob | undefined {
-  return videoJobs.get(id);
-}
-
-export function updateJob(id: string, updates: Partial<VideoJob>): VideoJob | null {
-  const job = videoJobs.get(id);
-  if (!job) {
-    return null;
-  }
-  const updated = { ...job, ...updates, updatedAt: Date.now() };
-  videoJobs.set(id, updated);
-  return updated;
-}
-
-export function deleteJob(id: string): boolean {
-  return videoJobs.delete(id);
-}
-
-/**
- * Получить все задачи, опционально отфильтрованные по channelId
- */
-export function getAllJobs(channelId?: string): VideoJob[] {
-  const jobs = Array.from(videoJobs.values());
-  if (channelId) {
-    return jobs.filter(job => job.channelId === channelId);
-  }
-  return jobs;
-}
-
-/**
- * Получить активные задачи (в процессе генерации)
- * Активные статусы: queued, sending, waiting_video, downloading, uploading
- */
-export function getActiveJobs(channelId?: string): VideoJob[] {
-  const activeStatuses: VideoJobStatus[] = ["queued", "sending", "waiting_video", "downloading", "uploading"];
-  const jobs = getAllJobs(channelId);
-  return jobs.filter(job => activeStatuses.includes(job.status));
-}
-
-/**
- * Подсчитать количество активных задач
- */
-export function countActiveJobs(channelId?: string): number {
-  return getActiveJobs(channelId).length;
-}
+// Экспортируем остальные функции
+export { getJobFromFirestore as getJob };
+export { updateJobInFirestore as updateJob };
+export { deleteJobFromFirestore as deleteJob };
+export { getAllJobsFromFirestore as getAllJobs };
+export { getActiveJobsFromFirestore as getActiveJobs };
+export { countActiveJobsFromFirestore as countActiveJobs };
 

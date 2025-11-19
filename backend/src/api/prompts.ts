@@ -21,7 +21,7 @@ router.post("/", async (req: Request, res: Response) => {
       });
     }
 
-    const channel = getChannelById(channelId);
+    const channel = await getChannelById(channelId);
     if (!channel) {
       return res.status(404).json({ error: "Канал не найден" });
     }

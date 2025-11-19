@@ -12,6 +12,7 @@ interface Channel {
   durationSeconds: number
   ideaPromptTemplate: string
   videoPromptTemplate: string
+  gdriveFolderId?: string | null
 }
 
 interface Idea {

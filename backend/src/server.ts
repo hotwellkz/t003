@@ -9,6 +9,7 @@ import videoJobsRouter from "./api/videoJobs";
 import transcribeRouter from "./api/transcribe";
 import titleRouter from "./api/title";
 import { getTelegramClient } from "./telegram/client";
+import { initializeFirebase } from "./firebase/admin";
 
 // Загружаем переменные окружения
 // Пытаемся загрузить из разных возможных мест
@@ -38,6 +39,19 @@ app.use("/api/generate-title", titleRouter);
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+// Инициализация Firebase (неблокирующая)
+if (process.env.FIREBASE_PROJECT_ID) {
+  try {
+    initializeFirebase();
+    console.log("🔥 Firebase инициализирован");
+  } catch (error: any) {
+    console.error("⚠️  Ошибка инициализации Firebase:", error.message);
+    console.log("💡 Убедитесь, что все FIREBASE_* переменные установлены в .env");
+  }
+} else {
+  console.warn("⚠️  Firebase не настроен (FIREBASE_PROJECT_ID не установлен)");
+}
 
 // Инициализация Telegram клиента и проверка бота при старте (неблокирующая)
 // Важно: не блокируем запуск сервера, но логируем статус

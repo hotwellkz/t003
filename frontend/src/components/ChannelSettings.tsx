@@ -12,6 +12,7 @@ interface Channel {
   durationSeconds: number
   ideaPromptTemplate: string
   videoPromptTemplate: string
+  gdriveFolderId?: string | null
 }
 
 const ChannelSettings: React.FC = () => {
@@ -27,6 +28,7 @@ const ChannelSettings: React.FC = () => {
     durationSeconds: 8,
     ideaPromptTemplate: '',
     videoPromptTemplate: '',
+    gdriveFolderId: '',
   })
 
   useEffect(() => {
@@ -62,6 +64,7 @@ const ChannelSettings: React.FC = () => {
       durationSeconds: 8,
       ideaPromptTemplate: '',
       videoPromptTemplate: '',
+      gdriveFolderId: '',
     })
     setEditingId(null)
   }
@@ -74,6 +77,7 @@ const ChannelSettings: React.FC = () => {
       durationSeconds: channel.durationSeconds,
       ideaPromptTemplate: channel.ideaPromptTemplate,
       videoPromptTemplate: channel.videoPromptTemplate,
+      gdriveFolderId: channel.gdriveFolderId || '',
     })
     setEditingId(channel.id)
     setError('')
@@ -220,6 +224,21 @@ const ChannelSettings: React.FC = () => {
             <small style={{ color: '#718096', marginTop: '0.5rem', display: 'block' }}>
               Используйте {'{{IDEA_TEXT}}'} для подстановки выбранной идеи. 
               OpenAI должен вернуть JSON с полями veo_prompt и video_title.
+            </small>
+          </div>
+
+          <div className="input-group">
+            <label>ID папки Google Drive (необязательно)</label>
+            <input
+              type="text"
+              value={formData.gdriveFolderId}
+              onChange={(e) =>
+                setFormData({ ...formData, gdriveFolderId: e.target.value })
+              }
+              placeholder="Например, 1AbCdEfGh..."
+            />
+            <small style={{ color: '#718096', marginTop: '0.5rem', display: 'block' }}>
+              Видео для этого канала будут сохраняться в эту папку. Если пусто — используется папка по умолчанию из настроек сервера.
             </small>
           </div>
 

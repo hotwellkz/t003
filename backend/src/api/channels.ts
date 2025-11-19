@@ -11,17 +11,18 @@ import {
 const router = Router();
 
 // GET /api/channels
-router.get("/", (req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
-    const channels = getAllChannels();
+    const channels = await getAllChannels();
     res.json(channels);
   } catch (error) {
+    console.error("Ошибка при получении каналов:", error);
     res.status(500).json({ error: "Ошибка при получении каналов" });
   }
 });
 
 // POST /api/channels
-router.post("/", (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   try {
     const {
       name,
@@ -30,6 +31,7 @@ router.post("/", (req: Request, res: Response) => {
       durationSeconds,
       ideaPromptTemplate,
       videoPromptTemplate,
+      gdriveFolderId,
     } = req.body;
 
     // Валидация обязательных полей
@@ -45,7 +47,7 @@ router.post("/", (req: Request, res: Response) => {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
 
-    const channel = createChannel({
+    const channel = await createChannel({
       id,
       name,
       description: description || "",
@@ -53,6 +55,7 @@ router.post("/", (req: Request, res: Response) => {
       durationSeconds: durationSeconds || 8,
       ideaPromptTemplate,
       videoPromptTemplate,
+      gdriveFolderId: gdriveFolderId || null,
     });
 
     res.json(channel);
@@ -63,7 +66,7 @@ router.post("/", (req: Request, res: Response) => {
 });
 
 // PUT /api/channels/:id
-router.put("/:id", (req: Request, res: Response) => {
+router.put("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const {
@@ -73,6 +76,7 @@ router.put("/:id", (req: Request, res: Response) => {
       durationSeconds,
       ideaPromptTemplate,
       videoPromptTemplate,
+      gdriveFolderId,
     } = req.body;
 
     // Валидация обязательных полей
@@ -82,13 +86,14 @@ router.put("/:id", (req: Request, res: Response) => {
       });
     }
 
-    const updated = updateChannel(id, {
+    const updated = await updateChannel(id, {
       name,
       description: description || "",
       language: language || "ru",
       durationSeconds: durationSeconds || 8,
       ideaPromptTemplate,
       videoPromptTemplate,
+      gdriveFolderId: gdriveFolderId || null,
     });
 
     if (!updated) {
@@ -103,10 +108,10 @@ router.put("/:id", (req: Request, res: Response) => {
 });
 
 // DELETE /api/channels/:id
-router.delete("/:id", (req: Request, res: Response) => {
+router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const deleted = deleteChannel(id);
+    const deleted = await deleteChannel(id);
 
     if (!deleted) {
       return res.status(404).json({ error: "Канал не найден" });
@@ -114,6 +119,7 @@ router.delete("/:id", (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (error) {
+    console.error("Ошибка при удалении канала:", error);
     res.status(500).json({ error: "Ошибка при удалении канала" });
   }
 });

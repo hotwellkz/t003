@@ -43,14 +43,17 @@ function getDriveAuth(): OAuth2Client {
 
 export async function uploadFileToDrive(
   localPath: string,
-  fileName?: string
+  fileName?: string,
+  folderId?: string | null // Если передан, используется этот folderId, иначе GDRIVE_FOLDER_ID из .env
 ): Promise<DriveUploadResult> {
-  const folderId = process.env.GDRIVE_FOLDER_ID;
+  // Определяем папку: сначала используем переданный folderId, затем из .env
+  const targetFolderId = folderId || process.env.GDRIVE_FOLDER_ID;
 
-  console.log("[Drive] Env GDRIVE_FOLDER_ID =", folderId);
+  console.log("[Drive] Target folder ID =", targetFolderId);
+  console.log("[Drive] Source:", folderId ? "channel.gdriveFolderId" : "GDRIVE_FOLDER_ID from .env");
 
-  if (!folderId) {
-    throw new Error("GDRIVE_FOLDER_ID должен быть задан в .env");
+  if (!targetFolderId) {
+    throw new Error("GDRIVE_FOLDER_ID должен быть задан в .env или в настройках канала");
   }
 
   // Авторизация через OAuth2
@@ -60,7 +63,7 @@ export async function uploadFileToDrive(
   // Определяем имя файла
   const finalFileName = fileName || path.basename(localPath);
 
-  console.log("[Drive] Uploading to folder:", folderId, "file:", finalFileName);
+  console.log("[Drive] Uploading to folder:", targetFolderId, "file:", finalFileName);
   console.log("[Drive] Local file path:", localPath);
 
   // Проверяем, что файл существует
@@ -73,12 +76,12 @@ export async function uploadFileToDrive(
 
   // Загружаем файл
   try {
-    console.log("[Drive] Creating file with parents:", [folderId]);
+    console.log("[Drive] Creating file with parents:", [targetFolderId]);
     
     const res = await drive.files.create({
       requestBody: {
         name: finalFileName,
-        parents: [folderId],
+        parents: [targetFolderId],
       },
       media: {
         mimeType: "video/mp4",
@@ -109,7 +112,7 @@ export async function uploadFileToDrive(
     
     console.error("[Drive] Upload error status:", err.response?.status);
     console.error("[Drive] Upload error data:", JSON.stringify(err.response?.data, null, 2));
-    console.error("[Drive] Used folderId:", folderId);
+    console.error("[Drive] Used folderId:", targetFolderId);
     console.error("[Drive] Error message:", err.message || String(error));
 
     throw error;

@@ -3,10 +3,16 @@ import * as fs from "fs";
 import * as path from "path";
 import { getTelegramClient } from "./client";
 
+export interface SyntxResult {
+  localPath: string;
+  requestMessageId: number;
+}
+
 export async function sendPromptToSyntx(
   prompt: string,
-  customFileName?: string
-): Promise<string> {
+  customFileName?: string,
+  requestMessageId?: number // Если передан, ищем ответ на это сообщение
+): Promise<SyntxResult> {
   const client = await getTelegramClient();
   const botUsername = process.env.SYNTX_BOT_USERNAME || "syntxaibot";
 
@@ -23,18 +29,26 @@ export async function sendPromptToSyntx(
     const entity = await client.getEntity(botUsername);
     
     // Отправляем промпт
-    console.log(`[Syntx] Отправляем промпт боту ${botUsername}...`);
-    const sentMessage = await client.sendMessage(entity, { message: prompt });
-    const sinceMessageId = sentMessage.id;
+    let actualRequestMessageId: number;
+    if (requestMessageId) {
+      // Если передан requestMessageId, используем его (для повторных попыток)
+      actualRequestMessageId = requestMessageId;
+      console.log(`[Syntx] Используем существующий requestMessageId: ${actualRequestMessageId}`);
+    } else {
+      // Иначе отправляем новое сообщение
+      console.log(`[Syntx] Отправляем промпт боту ${botUsername}...`);
+      const sentMessage = await client.sendMessage(entity, { message: prompt });
+      actualRequestMessageId = sentMessage.id;
+      console.log(`[Syntx] ✅ Промпт отправлен боту ${botUsername}, message ID: ${actualRequestMessageId}`);
+    }
 
-    console.log(`[Syntx] ✅ Промпт отправлен боту ${botUsername}, message ID: ${sinceMessageId}`);
     console.log(`[Syntx] Ожидаем видео (таймаут: 15 минут)...`);
 
-    // Ждём видеосообщение
+    // Ждём видеосообщение, связанное с нашим запросом через reply_to_message_id
     const videoMessage = await waitForSyntxVideo(
       client,
       entity,
-      sinceMessageId,
+      actualRequestMessageId,
       15 * 60 * 1000 // 15 минут
     );
 
@@ -87,7 +101,10 @@ export async function sendPromptToSyntx(
       }
 
       console.log(`[Syntx] ✅ Видео успешно скачано: ${filePath}`);
-      return filePath;
+      return {
+        localPath: filePath,
+        requestMessageId: actualRequestMessageId,
+      };
     } catch (err: any) {
       console.error("[Syntx] Error while downloading media (file mode):", err);
       
@@ -110,7 +127,10 @@ export async function sendPromptToSyntx(
         }
 
         console.log(`[Syntx] ✅ Видео успешно скачано (buffer mode): ${filePath}`);
-        return filePath;
+        return {
+          localPath: filePath,
+          requestMessageId: actualRequestMessageId,
+        };
       } catch (bufferErr: any) {
         console.error("[Syntx] Error while downloading media (buffer mode):", bufferErr);
         throw new Error(`Failed to download media: ${err.message || err}. Buffer mode also failed: ${bufferErr.message || bufferErr}`);
@@ -131,26 +151,24 @@ export async function sendPromptToSyntx(
 async function waitForSyntxVideo(
   client: TelegramClient,
   chat: Api.TypeEntityLike,
-  sinceMessageId: number,
+  requestMessageId: number,
   timeoutMs: number
 ): Promise<Api.Message> {
   const startTime = Date.now();
   const pollInterval = 10000; // 10 секунд
   const botUsername = process.env.SYNTX_BOT_USERNAME || "syntxaibot";
 
+  console.log(`[Syntx] Ожидаем видео с reply_to_message_id = ${requestMessageId}`);
+
   while (Date.now() - startTime < timeoutMs) {
     try {
       // Получаем последние сообщения из диалога с ботом
       const messages = await client.getMessages(chat, {
-        limit: 20,
+        limit: 50, // Увеличиваем лимит для надёжности
       });
 
-      // Ищем видеосообщение после sinceMessageId
+      // Ищем видеосообщение, которое является ответом на наш запрос
       for (const message of messages) {
-        if (message.id <= sinceMessageId) {
-          continue;
-        }
-
         // Проверяем, что сообщение от бота (не от нас)
         const fromId = message.fromId;
         if (fromId) {
@@ -170,6 +188,28 @@ async function waitForSyntxVideo(
           }
         }
 
+        // КРИТИЧНО: Проверяем, что сообщение является ответом на наш запрос
+        // Используем reply_to для точного сопоставления
+        const replyTo = message.replyTo;
+        if (replyTo && replyTo.replyToMsgId) {
+          const replyToMsgId = replyTo.replyToMsgId;
+          if (replyToMsgId !== requestMessageId) {
+            // Это ответ на другое сообщение, пропускаем
+            continue;
+          }
+        } else {
+          // Если у сообщения нет reply_to, но оно новее нашего запроса,
+          // это может быть ответ (некоторые боты не используют reply_to).
+          // В таком случае проверяем, что сообщение идёт после нашего запроса
+          if (message.id <= requestMessageId) {
+            continue;
+          }
+          // Дополнительная проверка: если сообщение намного новее (более 5 минут),
+          // скорее всего это не ответ на наш запрос
+          // Но для надёжности оставляем эту логику как fallback
+          console.log(`[Syntx] Сообщение ${message.id} не имеет reply_to, но новее запроса ${requestMessageId}. Проверяем как fallback.`);
+        }
+
         // Проверяем, есть ли видео
         if (message.media) {
           if (message.media instanceof Api.MessageMediaDocument) {
@@ -177,7 +217,7 @@ async function waitForSyntxVideo(
             if (document instanceof Api.Document) {
               for (const attr of document.attributes) {
                 if (attr instanceof Api.DocumentAttributeVideo) {
-                  console.log(`[Syntx] ✅ Видео получено от бота ${botUsername}, message ID: ${message.id}`);
+                  console.log(`[Syntx] ✅ Видео получено от бота ${botUsername}, message ID: ${message.id}, reply_to: ${replyTo?.replyToMsgId || 'none'}`);
                   console.log(`[Syntx] Video info: duration=${attr.duration}s, size=${document.size} bytes`);
                   return message as Api.Message;
                 }
@@ -199,7 +239,7 @@ async function waitForSyntxVideo(
   }
 
   throw new Error(
-    `Таймаут ожидания видео от бота ${botUsername} (${timeoutMs / 1000} секунд)`
+    `Таймаут ожидания видео от бота ${botUsername} для запроса ${requestMessageId} (${timeoutMs / 1000} секунд)`
   );
 }
 

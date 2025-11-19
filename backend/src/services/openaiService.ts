@@ -160,7 +160,27 @@ export async function generateVeoPrompt(
     prompt = prompt.replace(/{{DURATION}}/g, channel.durationSeconds.toString());
     prompt = prompt.replace(/{{LANGUAGE}}/g, channel.language);
 
-    console.log("[OpenAI] Generating Veo prompt with template:", prompt.substring(0, 200) + "...");
+    // Определяем язык для промпта и названия на основе языка канала
+    const langMap: Record<string, { prompt: string; title: string }> = {
+      ru: {
+        prompt: "русском",
+        title: "русском",
+      },
+      kk: {
+        prompt: "казахском",
+        title: "казахском",
+      },
+      en: {
+        prompt: "английском",
+        title: "английском",
+      },
+    };
+
+    const langInfo = langMap[channel.language] || langMap.ru;
+    const promptLangName = langInfo.prompt;
+    const titleLangName = langInfo.title;
+
+    console.log(`[OpenAI] Generating Veo prompt with template (language: ${channel.language}):`, prompt.substring(0, 200) + "...");
 
     const client = getOpenAIClient();
     const response = await client.chat.completions.create({
@@ -169,7 +189,7 @@ export async function generateVeoPrompt(
         {
           role: "system",
           content:
-            "Ты помощник для генерации промптов для видео. Всегда возвращай ответ строго в формате JSON с полями veo_prompt (английский текст промпта для Veo) и video_title (русское название для YouTube).",
+            `Ты помощник для генерации промптов для видео. Всегда возвращай ответ строго в формате JSON с полями veo_prompt (промпт для Veo 3.1 Fast на ${promptLangName} языке) и video_title (название для YouTube на ${titleLangName} языке).`,
         },
         {
           role: "user",

@@ -23,7 +23,7 @@ router.post("/generate", async (req: Request, res: Response) => {
     }
 
     // Создаём job с videoTitle
-    const job = createJob(veoprompt, channelId, ideaText, videoTitle);
+    const job = await createJob(veoprompt, channelId, ideaText, videoTitle);
     console.log(`[VideoJob] Created job ${job.id}, videoTitle: ${videoTitle || "не указано"}`);
 
     try {
@@ -31,10 +31,11 @@ router.post("/generate", async (req: Request, res: Response) => {
       const safeFileName = videoTitle ? getSafeFileName(videoTitle) : undefined;
       
       // Отправляем промпт в Syntx AI с указанием имени файла
-      const localPath = await sendPromptToSyntx(veoprompt, safeFileName);
+      const syntxResult = await sendPromptToSyntx(veoprompt, safeFileName);
+      const localPath = syntxResult.localPath;
 
       // Обновляем job
-      const updatedJob = updateJob(job.id, {
+      const updatedJob = await updateJob(job.id, {
         status: "ready",
         localPath,
       });
@@ -61,7 +62,7 @@ router.post("/generate", async (req: Request, res: Response) => {
       });
     } catch (error: any) {
       // Обновляем статус на error
-      updateJob(job.id, {
+      await updateJob(job.id, {
         status: "error",
       });
 
@@ -84,10 +85,10 @@ router.post("/generate", async (req: Request, res: Response) => {
 });
 
 // GET /api/video/preview/:id
-router.get("/preview/:id", (req: Request, res: Response) => {
+router.get("/preview/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const job = getJob(id);
+    const job = await getJob(id);
 
     if (!job) {
       return res.status(404).json({ error: "Job не найден" });
@@ -130,7 +131,7 @@ router.post("/jobs/:id/approve", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { videoTitle } = req.body; // Принимаем обновлённое название из запроса
-    const job = getJob(id);
+    const job = await getJob(id);
 
     if (!job) {
       return res.status(404).json({ error: "Job не найден" });
@@ -161,12 +162,12 @@ router.post("/jobs/:id/approve", async (req: Request, res: Response) => {
     // Обновляем title в job, если передан новый
     const finalTitle = videoTitle && videoTitle.trim() ? videoTitle.trim() : job.videoTitle;
     if (finalTitle && finalTitle !== job.videoTitle) {
-      updateJob(id, { videoTitle: finalTitle });
+      await updateJob(id, { videoTitle: finalTitle });
       console.log(`[VideoJob] Updated title for job ${id}: ${finalTitle}`);
     }
 
     // Обновляем статус на uploading
-    updateJob(id, { status: "uploading" });
+    await updateJob(id, { status: "uploading" });
 
     try {
       // Генерируем имя файла из videoTitle или используем дефолтное
@@ -182,7 +183,7 @@ router.post("/jobs/:id/approve", async (req: Request, res: Response) => {
       console.log(`[VideoJob] Successfully uploaded to Google Drive: ${driveResult.fileId}`);
 
       // Обновляем job
-      updateJob(id, {
+      await updateJob(id, {
         status: "uploaded",
         driveFileId: driveResult.fileId,
         webViewLink: driveResult.webViewLink,
@@ -199,7 +200,7 @@ router.post("/jobs/:id/approve", async (req: Request, res: Response) => {
         googleDriveWebContentLink: driveResult.webContentLink,
       });
     } catch (error: any) {
-      updateJob(id, { status: "ready" }); // Откатываем статус
+      await updateJob(id, { status: "ready" }); // Откатываем статус
       throw error;
     }
   } catch (error: any) {
@@ -212,10 +213,10 @@ router.post("/jobs/:id/approve", async (req: Request, res: Response) => {
 });
 
 // POST /api/video/jobs/:id/reject
-router.post("/jobs/:id/reject", (req: Request, res: Response) => {
+router.post("/jobs/:id/reject", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const job = getJob(id);
+    const job = await getJob(id);
 
     if (!job) {
       return res.status(404).json({ error: "Job не найден" });
@@ -231,7 +232,7 @@ router.post("/jobs/:id/reject", (req: Request, res: Response) => {
     }
 
     // Обновляем статус
-    updateJob(id, { status: "rejected" });
+    await updateJob(id, { status: "rejected" });
 
     res.json({ status: "rejected" });
   } catch (error) {
@@ -244,7 +245,7 @@ router.post("/jobs/:id/reject", (req: Request, res: Response) => {
 router.post("/jobs/:id/regenerate", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const oldJob = getJob(id);
+    const oldJob = await getJob(id);
 
     if (!oldJob) {
       return res.status(404).json({ error: "Job не найден" });
@@ -254,7 +255,7 @@ router.post("/jobs/:id/regenerate", async (req: Request, res: Response) => {
     const veoprompt = req.body.veoprompt || oldJob.prompt;
 
     // Создаём новый job с сохранением videoTitle
-    const newJob = createJob(
+    const newJob = await createJob(
       veoprompt,
       oldJob.channelId,
       oldJob.ideaText,
@@ -266,9 +267,10 @@ router.post("/jobs/:id/regenerate", async (req: Request, res: Response) => {
       const safeFileName = newJob.videoTitle ? getSafeFileName(newJob.videoTitle) : undefined;
       
       // Генерируем новое видео
-      const localPath = await sendPromptToSyntx(veoprompt, safeFileName);
+      const syntxResult = await sendPromptToSyntx(veoprompt, safeFileName);
+      const localPath = syntxResult.localPath;
 
-      updateJob(newJob.id, {
+      await updateJob(newJob.id, {
         status: "ready",
         localPath,
       });
@@ -279,7 +281,7 @@ router.post("/jobs/:id/regenerate", async (req: Request, res: Response) => {
         previewUrl: `/api/video/preview/${newJob.id}`,
       });
     } catch (error: any) {
-      updateJob(newJob.id, {
+      await updateJob(newJob.id, {
         status: "error",
       });
 

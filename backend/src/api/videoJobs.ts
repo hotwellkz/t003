@@ -11,6 +11,7 @@ import {
   countActiveJobs,
   VideoJobStatus,
 } from "../models/videoJob";
+import { getChannelById } from "../models/channel";
 import { getSafeFileName } from "../utils/fileNameSanitizer";
 
 const router = Router();
@@ -21,7 +22,7 @@ const MAX_ACTIVE_JOBS = 2;
  * Асинхронная функция для обработки генерации видео
  */
 async function processVideoGeneration(jobId: string): Promise<void> {
-  const job = getJob(jobId);
+  const job = await getJob(jobId);
   if (!job) {
     console.error(`[VideoJob] Job ${jobId} not found for processing`);
     return;
@@ -29,7 +30,7 @@ async function processVideoGeneration(jobId: string): Promise<void> {
 
   try {
     // Статус: sending - отправка промпта
-    updateJob(jobId, { status: "sending" });
+    await updateJob(jobId, { status: "sending" });
     console.log(`[VideoJob] Job ${jobId}: sending prompt to Syntx`);
 
     // Формируем безопасное имя файла из videoTitle
@@ -40,31 +41,37 @@ async function processVideoGeneration(jobId: string): Promise<void> {
     console.log(`[VideoJob] Job ${jobId}: waiting for video from Syntx`);
 
     // Отправляем промпт в Syntx AI и ждём видео
-    const localPath = await sendPromptToSyntx(job.prompt, safeFileName);
+    // Используем существующий requestMessageId, если он есть (для повторных попыток)
+    const existingRequestMessageId = job.telegramRequestMessageId;
+    const syntxResult = await sendPromptToSyntx(job.prompt, safeFileName, existingRequestMessageId);
+
+    // Сохраняем requestMessageId для связи с ответом
+    await updateJob(jobId, { telegramRequestMessageId: syntxResult.requestMessageId });
+    console.log(`[VideoJob] Job ${jobId}: saved telegramRequestMessageId: ${syntxResult.requestMessageId}`);
 
     // Статус: downloading - скачивание
-    updateJob(jobId, { status: "downloading" });
+    await updateJob(jobId, { status: "downloading" });
     console.log(`[VideoJob] Job ${jobId}: downloading video`);
 
     // Проверяем, что файл существует
-    if (!fs.existsSync(localPath)) {
-      throw new Error(`File does not exist after download: ${localPath}`);
+    if (!fs.existsSync(syntxResult.localPath)) {
+      throw new Error(`File does not exist after download: ${syntxResult.localPath}`);
     }
 
-    const fileStat = fs.statSync(localPath);
+    const fileStat = fs.statSync(syntxResult.localPath);
     console.log(`[VideoJob] Job ${jobId}: file verified, size: ${fileStat.size} bytes`);
 
     // Статус: ready - готово
-    updateJob(jobId, {
+    await updateJob(jobId, {
       status: "ready",
-      localPath,
+      localPath: syntxResult.localPath,
     });
 
     console.log(`[VideoJob] Job ${jobId} completed successfully`);
   } catch (error: any) {
     console.error(`[VideoJob] Job ${jobId} error:`, error);
     const errorMessage = error?.message || error?.toString() || "Неизвестная ошибка";
-    updateJob(jobId, {
+    await updateJob(jobId, {
       status: "error",
       errorMessage,
     });
@@ -84,7 +91,7 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     // Проверяем лимит активных задач
-    const activeCount = countActiveJobs(channelId);
+    const activeCount = await countActiveJobs(channelId);
     if (activeCount >= MAX_ACTIVE_JOBS) {
       return res.status(429).json({
         error: "MAX_ACTIVE_JOBS_REACHED",
@@ -95,7 +102,7 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     // Создаём задачу
-    const job = createJob(
+    const job = await createJob(
       prompt.trim(),
       channelId,
       channelName,
@@ -130,12 +137,12 @@ router.post("/", async (req: Request, res: Response) => {
  * GET /api/video-jobs
  * Получить список задач (опционально отфильтрованных по channelId)
  */
-router.get("/", (req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const { channelId } = req.query;
     const channelIdStr = channelId ? String(channelId) : undefined;
 
-    const jobs = getAllJobs(channelIdStr);
+    const jobs = await getAllJobs(channelIdStr);
     
     // Сортируем по createdAt (новые сверху) и ограничиваем последними 20
     const sortedJobs = jobs
@@ -161,7 +168,7 @@ router.get("/", (req: Request, res: Response) => {
 
     res.json({
       jobs: sortedJobs,
-      activeCount: countActiveJobs(channelIdStr),
+      activeCount: await countActiveJobs(channelIdStr),
       maxActiveJobs: MAX_ACTIVE_JOBS,
     });
   } catch (error: any) {
@@ -177,10 +184,10 @@ router.get("/", (req: Request, res: Response) => {
  * GET /api/video-jobs/:id
  * Получить информацию о конкретной задаче
  */
-router.get("/:id", (req: Request, res: Response) => {
+router.get("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const job = getJob(id);
+    const job = await getJob(id);
 
     if (!job) {
       return res.status(404).json({ error: "Job не найден" });
@@ -216,10 +223,10 @@ router.get("/:id", (req: Request, res: Response) => {
  * GET /api/video-jobs/:id/preview
  * Получить превью видео (стриминг файла)
  */
-router.get("/:id/preview", (req: Request, res: Response) => {
+router.get("/:id/preview", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const job = getJob(id);
+    const job = await getJob(id);
 
     if (!job) {
       return res.status(404).json({ error: "Job не найден" });
@@ -253,7 +260,7 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { videoTitle } = req.body;
-    const job = getJob(id);
+    const job = await getJob(id);
 
     if (!job) {
       return res.status(404).json({ error: "Job не найден" });
@@ -284,12 +291,12 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     // Обновляем title в job, если передан новый
     const finalTitle = videoTitle && videoTitle.trim() ? videoTitle.trim() : job.videoTitle;
     if (finalTitle && finalTitle !== job.videoTitle) {
-      updateJob(id, { videoTitle: finalTitle });
+      await updateJob(id, { videoTitle: finalTitle });
       console.log(`[VideoJob] Updated title for job ${id}: ${finalTitle}`);
     }
 
     // Обновляем статус на uploading
-    updateJob(id, { status: "uploading" });
+    await updateJob(id, { status: "uploading" });
 
     try {
       // Генерируем имя файла из videoTitle или используем дефолтное
@@ -298,13 +305,27 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
         : `video_${job.id}_${Date.now()}.mp4`;
       console.log(`[VideoJob] Uploading to Google Drive: ${fileName}`);
 
+      // Определяем папку Google Drive: сначала из канала, затем из .env
+      let targetFolderId: string | null | undefined = null;
+      if (job.channelId) {
+        const channel = await getChannelById(job.channelId);
+        if (channel && channel.gdriveFolderId) {
+          targetFolderId = channel.gdriveFolderId;
+          console.log(`[VideoJob] Using folder from channel ${job.channelId}: ${targetFolderId}`);
+        } else {
+          console.log(`[VideoJob] Channel ${job.channelId} has no gdriveFolderId, using default from .env`);
+        }
+      } else {
+        console.log(`[VideoJob] No channelId, using default folder from .env`);
+      }
+
       // Загружаем в Google Drive
-      const driveResult = await uploadFileToDrive(job.localPath, fileName);
+      const driveResult = await uploadFileToDrive(job.localPath, fileName, targetFolderId);
 
       console.log(`[VideoJob] Successfully uploaded to Google Drive: ${driveResult.fileId}`);
 
       // Обновляем job
-      updateJob(id, {
+      await updateJob(id, {
         status: "uploaded",
         driveFileId: driveResult.fileId,
         webViewLink: driveResult.webViewLink,
@@ -318,7 +339,7 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
         googleDriveWebContentLink: driveResult.webContentLink,
       });
     } catch (error: any) {
-      updateJob(id, { status: "ready" }); // Откатываем статус
+      await updateJob(id, { status: "ready" }); // Откатываем статус
       throw error;
     }
   } catch (error: any) {
@@ -334,10 +355,10 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
  * POST /api/video-jobs/:id/reject
  * Отклонить видео
  */
-router.post("/:id/reject", (req: Request, res: Response) => {
+router.post("/:id/reject", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const job = getJob(id);
+    const job = await getJob(id);
 
     if (!job) {
       return res.status(404).json({ error: "Job не найден" });
@@ -353,7 +374,7 @@ router.post("/:id/reject", (req: Request, res: Response) => {
       }
     }
 
-    updateJob(id, {
+    await updateJob(id, {
       status: "rejected",
       localPath: undefined,
     });

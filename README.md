@@ -64,6 +64,18 @@ GDRIVE_FOLDER_ID=id_папки_в_google_drive
 # OpenAI API (для генерации идей, промптов и транскрипции голоса)
 OPENAI_API_KEY=ваш_openai_api_key
 
+# Firebase (Firestore)
+FIREBASE_PROJECT_ID=ваш_project_id
+FIREBASE_PRIVATE_KEY_ID=ваш_private_key_id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=ваш_client_email
+FIREBASE_CLIENT_ID=ваш_client_id
+FIREBASE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
+FIREBASE_TOKEN_URI=https://oauth2.googleapis.com/token
+FIREBASE_AUTH_PROVIDER_X509_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
+FIREBASE_CLIENT_X509_CERT_URL=ваш_client_x509_cert_url
+FIREBASE_UNIVERSE_DOMAIN=googleapis.com
+
 # HTTP сервер
 PORT=4000
 ```
@@ -135,7 +147,8 @@ VITE_API_URL=https://your-backend-api.example.com
 3. **Настройте папку:**
    - Создайте папку в вашем Google Drive
    - Откройте папку и скопируйте ID из URL: `https://drive.google.com/drive/folders/ВАШ_ID`
-   - Укажите ID в `GDRIVE_FOLDER_ID`
+   - Укажите ID в `GDRIVE_FOLDER_ID` (это папка по умолчанию)
+   - **Для разных каналов можно указать свои папки:** в настройках канала (в веб-интерфейсе) есть поле "ID папки Google Drive". Если указать ID папки для канала, видео этого канала будут сохраняться в эту папку, а не в папку по умолчанию.
 
 ### 3. Первичная авторизация в Telegram
 
@@ -193,10 +206,51 @@ Frontend запустится на `http://localhost:3000`
    - Дождитесь генерации (может занять несколько минут)
    - Просмотрите видео и одобрите/отклоните/перегенерируйте
 
+## Особенности работы
+
+### Генерация промптов на языке канала
+
+Промпты для Veo 3.1 Fast и названия видео автоматически генерируются на том же языке, что и язык канала:
+
+- Если канал на русском (`language: "ru"`) → промпт и название на русском
+- Если канал на английском (`language: "en"`) → промпт и название на английском
+- Если канал на казахском (`language: "kk"`) → промпт и название на казахском
+
+Язык определяется автоматически из настроек канала при генерации промпта через OpenAI.
+
+### Связь запроса с ответом в Telegram
+
+При генерации видео система использует `reply_to_message_id` для точного сопоставления запроса и ответа от бота Syntx. Это гарантирует, что:
+
+- Каждое задание генерации жёстко связано со своим результатом
+- При нескольких генерациях с одинаковым промптом в приложении и на диске оказываются именно разные файлы
+- Каждое задание имеет свой уникальный `telegramRequestMessageId`, который сохраняется в базе
+
+### Разные папки Google Drive для разных каналов
+
+Каждый канал может иметь свою папку в Google Drive:
+
+1. **Настройка папки для канала:**
+   - Перейдите во вкладку "Настройки каналов"
+   - Создайте или отредактируйте канал
+   - В поле "ID папки Google Drive" укажите ID папки (например, `1AbCdEfGh...`)
+   - Если поле пустое, используется папка по умолчанию из `GDRIVE_FOLDER_ID` в `.env`
+
+2. **Как получить ID папки:**
+   - Откройте папку в Google Drive
+   - Скопируйте ID из URL: `https://drive.google.com/drive/folders/ВАШ_ID`
+   - Вставьте ID в поле настройки канала
+
+3. **Поведение:**
+   - Видео для канала A сохраняются в папку, указанную в `gdriveFolderId` канала A
+   - Видео для канала B сохраняются в папку, указанную в `gdriveFolderId` канала B
+   - Если у канала `gdriveFolderId` не указан, используется `GDRIVE_FOLDER_ID` из `.env`
+
 ## API Endpoints
 
 - `GET /api/channels` - Получить список каналов
-- `POST /api/channels` - Создать канал
+- `POST /api/channels` - Создать канал (поддерживает поле `gdriveFolderId`)
+- `PUT /api/channels/:id` - Обновить канал (поддерживает поле `gdriveFolderId`)
 - `DELETE /api/channels/:id` - Удалить канал
 - `POST /api/ideas/generate` - Сгенерировать идеи для канала
 - `POST /api/prompts/veo` - Сгенерировать промпт для Veo
@@ -216,12 +270,21 @@ Frontend запустится на `http://localhost:3000`
 - **Google Drive**: googleapis
 - **OpenAI**: OpenAI API (для генерации идей, промптов и транскрипции голоса через Whisper)
 - **Голосовой ввод**: MediaRecorder API (frontend) + OpenAI Whisper (backend)
-- **Хранение данных**: In-memory (можно заменить на БД)
+- **Хранение данных**: Firebase Firestore (каналы, настройки, задачи генерации видео)
+
+## Настройка Firebase
+
+Подробная инструкция по настройке Firebase Firestore находится в [`backend/FIREBASE_SETUP.md`](backend/FIREBASE_SETUP.md).
+
+Кратко:
+1. Получите Service Account credentials из Firebase Console
+2. Добавьте все `FIREBASE_*` переменные в `.env`
+3. Выполните миграцию начальных данных: `npm run migrate-channels`
 
 ## Примечания
 
-- Данные хранятся в памяти (in-memory), при перезапуске сервера они сбросятся
-- Для продакшена рекомендуется использовать базу данных (PostgreSQL, MongoDB и т.д.)
+- Данные хранятся в Firebase Firestore, сохраняются между перезапусками сервера
+- Каналы и задачи генерации видео синхронизируются через Firestore
 - Генерация идей и промптов использует OpenAI API (gpt-4o-mini)
 - Голосовой ввод использует OpenAI Whisper для транскрипции речи (более надёжно, чем браузерный SpeechRecognition)
 - Видео скачиваются локально в папку `downloads/` (можно настроить через `DOWNLOAD_DIR`)
