@@ -16,14 +16,29 @@ export async function getAllChannels(): Promise<Channel[]> {
       const data = doc.data();
       channels.push({
         id: doc.id,
-        ...data,
+        name: data.name || "",
+        description: data.description || "",
+        language: data.language || "ru",
+        durationSeconds: data.durationSeconds || 8,
+        ideaPromptTemplate: data.ideaPromptTemplate || "",
+        videoPromptTemplate: data.videoPromptTemplate || "",
+        gdriveFolderId: data.gdriveFolderId || null,
       } as Channel);
     });
 
+    console.log(`[Firebase] ✅ Получено ${channels.length} каналов`);
     return channels;
   } catch (error: unknown) {
-    console.error("[Firebase] Error getting channels:", error);
-    throw new Error(`Ошибка получения каналов: ${error instanceof Error ? error.message : String(error)}`);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[Firebase] ❌ Error getting channels:", errorMessage);
+    
+    // Если Firebase не настроен, возвращаем пустой массив вместо ошибки
+    if (errorMessage.includes("Firebase не инициализирован") || errorMessage.includes("FIREBASE_")) {
+      console.warn("[Firebase] ⚠️  Firebase не настроен, возвращаем пустой массив каналов");
+      return [];
+    }
+    
+    throw new Error(`Ошибка получения каналов: ${errorMessage}`);
   }
 }
 

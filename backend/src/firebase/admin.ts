@@ -47,11 +47,25 @@ export function initializeFirebase(): admin.app.App {
 
 /**
  * Получить экземпляр Firestore
+ * @throws Error если Firebase не инициализирован
  */
 export function getFirestore(): admin.firestore.Firestore {
   if (!firebaseApp) {
-    initializeFirebase();
+    try {
+      initializeFirebase();
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error("[Firebase] ❌ Не удалось инициализировать Firebase:", errorMessage);
+      throw new Error(
+        `Firebase не инициализирован. Проверьте переменные окружения FIREBASE_*. Ошибка: ${errorMessage}`
+      );
+    }
   }
+  
+  if (!firebaseApp) {
+    throw new Error("Firebase не инициализирован. Установите переменные окружения FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL");
+  }
+  
   return admin.firestore();
 }
 

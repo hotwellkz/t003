@@ -15,9 +15,23 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     const channels = await getAllChannels();
     res.json(channels);
-  } catch (error) {
-    console.error("Ошибка при получении каналов:", error);
-    res.status(500).json({ error: "Ошибка при получении каналов" });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[API] Ошибка при получении каналов:", errorMessage);
+    
+    // Если это ошибка Firebase, возвращаем более детальное сообщение
+    if (errorMessage.includes("Firebase не инициализирован") || errorMessage.includes("FIREBASE_")) {
+      console.error("[API] Firebase credentials отсутствуют или неверны");
+      return res.status(500).json({ 
+        error: "Firebase не настроен. Проверьте переменные окружения FIREBASE_* в Cloud Run.",
+        details: errorMessage 
+      });
+    }
+    
+    res.status(500).json({ 
+      error: "Ошибка при получении каналов",
+      details: errorMessage 
+    });
   }
 });
 

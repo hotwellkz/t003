@@ -28,26 +28,76 @@ gcloud run deploy whitecoding-backend \
 
 Все чувствительные данные задаём через Cloud Run → **whitecoding-backend** → **Variables & Secrets**:
 
+#### Обязательные переменные:
+
+**OpenAI:**
 ```
-OPENAI_API_KEY
-TELEGRAM_API_ID
-TELEGRAM_API_HASH
-TELEGRAM_STRING_SESSION
-SYNTX_BOT_USERNAME
-TELEGRAM_PHONE_NUMBER
-TELEGRAM_2FA_PASSWORD
-GDRIVE_CLIENT_ID
-GDRIVE_CLIENT_SECRET
-GDRIVE_FOLDER_ID
-GDRIVE_SERVICE_ACCOUNT_EMAIL
-GDRIVE_PRIVATE_KEY
-GDRIVE_REFRESH_TOKEN
+OPENAI_API_KEY=sk-...
+```
+
+**Telegram:**
+```
+TELEGRAM_API_ID=12345678
+TELEGRAM_API_HASH=abcdef1234567890...
+TELEGRAM_STRING_SESSION=...
+SYNTX_BOT_USERNAME=syntxaibot
+```
+
+**Google Drive (OAuth2):**
+```
+GDRIVE_CLIENT_ID=...
+GDRIVE_CLIENT_SECRET=...
+GDRIVE_REFRESH_TOKEN=...
+GDRIVE_FOLDER_ID=...  # ID папки по умолчанию
+```
+
+**Firebase (Firestore) - ОБЯЗАТЕЛЬНО:**
+```
+FIREBASE_PROJECT_ID=bibi-b7ce9
+FIREBASE_PRIVATE_KEY_ID=fc921a371dd1cfe270c1bc6a2c6e9a3bee0db023
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-fbsvc@bibi-b7ce9.iam.gserviceaccount.com
+FIREBASE_CLIENT_ID=116571718701338136626
+FIREBASE_AUTH_URI=https://accounts.google.com/o/oauth2/auth
+FIREBASE_TOKEN_URI=https://oauth2.googleapis.com/token
+FIREBASE_AUTH_PROVIDER_X509_CERT_URL=https://www.googleapis.com/oauth2/v1/certs
+FIREBASE_CLIENT_X509_CERT_URL=https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40bibi-b7ce9.iam.gserviceaccount.com
+FIREBASE_UNIVERSE_DOMAIN=googleapis.com
+```
+
+**Системные:**
+```
 DOWNLOAD_DIR=/tmp
 ```
 
-> `DOWNLOAD_DIR` на Cloud Run должен указывать на временную директорию (`/tmp`), т.к. файловая система только для короткого хранения.
+> ⚠️ **ВАЖНО:** 
+> - `DOWNLOAD_DIR` на Cloud Run должен указывать на временную директорию (`/tmp`), т.к. файловая система только для короткого хранения.
+> - `FIREBASE_PRIVATE_KEY` должен быть в кавычках и содержать `\n` для переносов строк (как в JSON).
+> - `PORT` задавать не нужно — Cloud Run автоматически устанавливает `PORT=8080`, а сервер читает его из `process.env.PORT`.
 
-`PORT` задавать не нужно — Cloud Run автоматически устанавливает `PORT=8080`, а сервер читает его из `process.env.PORT`.
+#### Как добавить переменные в Cloud Run:
+
+1. Откройте [Google Cloud Console](https://console.cloud.google.com/)
+2. Перейдите в **Cloud Run** → выберите сервис **whitecoding-backend**
+3. Нажмите **Edit & Deploy New Revision**
+4. Откройте вкладку **Variables & Secrets**
+5. Добавьте каждую переменную через кнопку **Add Variable**
+6. Для `FIREBASE_PRIVATE_KEY` используйте многострочный формат или вставьте как одну строку с `\n`
+
+#### Проверка переменных Firebase:
+
+После деплоя проверьте логи Cloud Run:
+```bash
+gcloud run services logs read whitecoding-backend --region=europe-central2 --limit=50
+```
+
+Должны увидеть:
+```
+🔥 Firebase инициализирован
+[Firebase] ✅ Firebase Admin SDK инициализирован
+```
+
+Если видите ошибки типа `Firebase не инициализирован` или `FIREBASE_* должны быть заданы`, проверьте, что все переменные добавлены правильно.
 
 ### 4. Проверка
 
