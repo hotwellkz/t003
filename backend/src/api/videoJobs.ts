@@ -181,47 +181,9 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/video-jobs/:id
- * Получить информацию о конкретной задаче
- */
-router.get("/:id", async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const job = await getJob(id);
-
-    if (!job) {
-      return res.status(404).json({ error: "Job не найден" });
-    }
-
-    res.json({
-      id: job.id,
-      prompt: job.prompt,
-      channelId: job.channelId,
-      channelName: job.channelName,
-      videoTitle: job.videoTitle,
-      status: job.status,
-      errorMessage: job.errorMessage,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
-      previewUrl: (job.status === "ready" || job.status === "uploaded") && job.localPath
-        ? `/api/video-jobs/${job.id}/preview`
-        : undefined,
-      driveFileId: job.driveFileId,
-      webViewLink: job.webViewLink,
-      webContentLink: job.webContentLink,
-    });
-  } catch (error: any) {
-    console.error("[VideoJob] Error getting job:", error);
-    res.status(500).json({
-      error: "Внутренняя ошибка сервера",
-      message: error?.message || "Неизвестная ошибка",
-    });
-  }
-});
-
-/**
  * GET /api/video-jobs/:id/preview
  * Получить превью видео (стриминг файла)
+ * ВАЖНО: Этот маршрут должен быть определён ПЕРЕД общим маршрутом /:id
  */
 router.get("/:id/preview", async (req: Request, res: Response) => {
   try {
@@ -255,6 +217,7 @@ router.get("/:id/preview", async (req: Request, res: Response) => {
 /**
  * POST /api/video-jobs/:id/approve
  * Одобрить и загрузить видео в Google Drive
+ * ВАЖНО: Этот маршрут должен быть определён ПЕРЕД общим маршрутом /:id
  */
 router.post("/:id/approve", async (req: Request, res: Response) => {
   try {
@@ -354,24 +317,36 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
 /**
  * POST /api/video-jobs/:id/reject
  * Отклонить видео
+ * ВАЖНО: Этот маршрут должен быть определён ПЕРЕД общим маршрутом /:id
  */
 router.post("/:id/reject", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    console.log(`[VideoJob] Reject request received for job ${id}`);
+
     const job = await getJob(id);
 
     if (!job) {
-      return res.status(404).json({ error: "Job не найден" });
+      console.error(`[VideoJob] Job ${id} not found for rejection`);
+      return res.status(404).json({ 
+        error: "Job не найден",
+        jobId: id,
+      });
     }
+
+    console.log(`[VideoJob] Rejecting job ${id}, current status: ${job.status}`);
 
     // Удаляем локальный файл, если есть
     if (job.localPath && fs.existsSync(job.localPath)) {
       try {
         fs.unlinkSync(job.localPath);
-        console.log(`[VideoJob] Deleted local file for rejected job ${id}: ${job.localPath}`);
+        console.log(`[VideoJob] ✅ Deleted local file for rejected job ${id}: ${job.localPath}`);
       } catch (unlinkError) {
-        console.error(`[VideoJob] Error deleting file for job ${id}:`, unlinkError);
+        console.error(`[VideoJob] ⚠️  Error deleting file for job ${id}:`, unlinkError);
+        // Не прерываем выполнение, если файл не удалось удалить
       }
+    } else if (job.localPath) {
+      console.log(`[VideoJob] ⚠️  Local file path specified but file does not exist: ${job.localPath}`);
     }
 
     await updateJob(id, {
@@ -379,12 +354,19 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
       localPath: undefined,
     });
 
-    res.json({ status: "rejected" });
+    console.log(`[VideoJob] ✅ Job ${id} successfully rejected`);
+
+    res.json({ 
+      status: "rejected",
+      jobId: id,
+    });
   } catch (error: any) {
-    console.error("Ошибка при отклонении видео:", error);
+    console.error(`[VideoJob] ❌ Error rejecting job ${req.params.id}:`, error);
+    const errorMessage = error?.message || error?.toString() || "Неизвестная ошибка";
     res.status(500).json({
       error: "Ошибка при отклонении видео",
-      message: error?.message || "Неизвестная ошибка",
+      message: errorMessage,
+      jobId: req.params.id,
     });
   }
 });
