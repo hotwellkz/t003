@@ -55,10 +55,11 @@ DOWNLOAD_DIR=./downloads
 TELEGRAM_PHONE_NUMBER=
 TELEGRAM_2FA_PASSWORD=
 
-# Google Drive
+# Google Drive (OAuth2)
+GDRIVE_CLIENT_ID=ваш_client_id
+GDRIVE_CLIENT_SECRET=ваш_client_secret
+GDRIVE_REFRESH_TOKEN=ваш_refresh_token
 GDRIVE_FOLDER_ID=id_папки_в_google_drive
-GDRIVE_SERVICE_ACCOUNT_EMAIL=email_сервисного_аккаунта
-GDRIVE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 
 # HTTP сервер
 PORT=4000
@@ -70,15 +71,34 @@ PORT=4000
 2. Войдите в свой аккаунт
 3. Создайте приложение и получите `api_id` и `api_hash`
 
-#### Как настроить Google Drive:
+#### Как настроить Google Drive (OAuth2):
 
-1. Создайте проект в Google Cloud Console
-2. Включите Google Drive API
-3. Создайте сервисный аккаунт и скачайте JSON ключ
-4. Скопируйте `client_email` в `GDRIVE_SERVICE_ACCOUNT_EMAIL`
-5. Скопируйте `private_key` в `GDRIVE_PRIVATE_KEY` (с `\n` для переносов строк)
-6. Получите ID папки в Google Drive и укажите в `GDRIVE_FOLDER_ID`
-7. Поделитесь папкой с email сервисного аккаунта (дайте права редактора)
+1. **Создайте OAuth 2.0 Client в Google Cloud Console:**
+   - Перейдите на https://console.cloud.google.com/
+   - Выберите проект (или создайте новый)
+   - Перейдите в "APIs & Services" → "Credentials"
+   - Нажмите "Create Credentials" → "OAuth client ID"
+   - Если впервые: настройте OAuth consent screen (выберите "External" и заполните обязательные поля)
+   - Выберите тип приложения: "Desktop app" или "Web application"
+   - Добавьте Authorized redirect URIs: `http://localhost:3000/oauth2callback`
+   - Скопируйте `Client ID` и `Client secret`
+
+2. **Получите refresh_token:**
+   ```bash
+   cd backend
+   npm run get-drive-token
+   ```
+   - Скрипт выведет OAuth-ссылку для авторизации (содержит все необходимые параметры, включая `response_type=code`)
+   - Откройте ссылку в браузере и авторизуйтесь в Google
+   - Разрешите доступ к Google Drive
+   - После авторизации скрипт автоматически получит код через локальный сервер и обменяет его на refresh_token
+   - Скрипт автоматически добавит `GDRIVE_REFRESH_TOKEN` в `.env` файл
+   - Если автоматическое обновление не сработало, скопируйте `GDRIVE_REFRESH_TOKEN` из консоли в `.env` вручную
+
+3. **Настройте папку:**
+   - Создайте папку в вашем Google Drive
+   - Откройте папку и скопируйте ID из URL: `https://drive.google.com/drive/folders/ВАШ_ID`
+   - Укажите ID в `GDRIVE_FOLDER_ID`
 
 ### 3. Первичная авторизация в Telegram
 

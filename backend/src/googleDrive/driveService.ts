@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { OAuth2Client } from "google-auth-library";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -8,54 +9,110 @@ export interface DriveUploadResult {
   webContentLink?: string;
 }
 
+/**
+ * Инициализирует OAuth2 клиент для Google Drive
+ */
+function getDriveAuth(): OAuth2Client {
+  const clientId = process.env.GDRIVE_CLIENT_ID;
+  const clientSecret = process.env.GDRIVE_CLIENT_SECRET;
+  const refreshToken = process.env.GDRIVE_REFRESH_TOKEN;
+
+  console.log("[Drive] Initializing OAuth2 client...");
+  console.log("[Drive] Env GDRIVE_CLIENT_ID =", clientId ? "SET" : "NOT SET");
+  console.log("[Drive] Env GDRIVE_CLIENT_SECRET =", clientSecret ? "SET" : "NOT SET");
+  console.log("[Drive] Env GDRIVE_REFRESH_TOKEN =", refreshToken ? "SET" : "NOT SET");
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error(
+      "GDRIVE_CLIENT_ID, GDRIVE_CLIENT_SECRET и GDRIVE_REFRESH_TOKEN должны быть заданы в .env"
+    );
+  }
+
+  const oauth2Client = new OAuth2Client({
+    clientId,
+    clientSecret,
+    redirectUri: "http://localhost:3000/oauth2callback",
+  });
+
+  oauth2Client.setCredentials({
+    refresh_token: refreshToken,
+  });
+
+  return oauth2Client;
+}
+
 export async function uploadFileToDrive(
   localPath: string,
   fileName?: string
 ): Promise<DriveUploadResult> {
-  const serviceAccountEmail = process.env.GDRIVE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = process.env.GDRIVE_PRIVATE_KEY?.replace(/\\n/g, "\n");
   const folderId = process.env.GDRIVE_FOLDER_ID;
 
-  if (!serviceAccountEmail || !privateKey || !folderId) {
-    throw new Error(
-      "GDRIVE_SERVICE_ACCOUNT_EMAIL, GDRIVE_PRIVATE_KEY и GDRIVE_FOLDER_ID должны быть заданы в .env"
-    );
+  console.log("[Drive] Env GDRIVE_FOLDER_ID =", folderId);
+
+  if (!folderId) {
+    throw new Error("GDRIVE_FOLDER_ID должен быть задан в .env");
   }
 
-  // Авторизация через JWT
-  const auth = new google.auth.JWT(
-    serviceAccountEmail,
-    undefined,
-    privateKey,
-    ["https://www.googleapis.com/auth/drive.file"]
-  );
-
+  // Авторизация через OAuth2
+  const auth = getDriveAuth();
   const drive = google.drive({ version: "v3", auth });
 
   // Определяем имя файла
   const finalFileName = fileName || path.basename(localPath);
 
-  // Загружаем файл
-  const res = await drive.files.create({
-    requestBody: {
-      name: finalFileName,
-      parents: [folderId],
-    },
-    media: {
-      mimeType: "video/mp4",
-      body: fs.createReadStream(localPath),
-    },
-    fields: "id, webViewLink, webContentLink",
-  });
+  console.log("[Drive] Uploading to folder:", folderId, "file:", finalFileName);
+  console.log("[Drive] Local file path:", localPath);
 
-  if (!res.data.id) {
-    throw new Error("Не удалось загрузить файл в Google Drive");
+  // Проверяем, что файл существует
+  if (!fs.existsSync(localPath)) {
+    throw new Error(`Файл не найден: ${localPath}`);
   }
 
-  return {
-    fileId: res.data.id,
-    webViewLink: res.data.webViewLink || undefined,
-    webContentLink: res.data.webContentLink || undefined,
-  };
+  const fileStats = fs.statSync(localPath);
+  console.log("[Drive] File size:", fileStats.size, "bytes");
+
+  // Загружаем файл
+  try {
+    console.log("[Drive] Creating file with parents:", [folderId]);
+    
+    const res = await drive.files.create({
+      requestBody: {
+        name: finalFileName,
+        parents: [folderId],
+      },
+      media: {
+        mimeType: "video/mp4",
+        body: fs.createReadStream(localPath),
+      },
+      fields: "id, name, parents, webViewLink, webContentLink",
+      supportsAllDrives: true, // Для поддержки Shared Drives
+    });
+
+    console.log("[Drive] Uploaded file info:", {
+      id: res.data.id,
+      name: res.data.name,
+      parents: res.data.parents,
+      webViewLink: res.data.webViewLink,
+    });
+
+    if (!res.data.id) {
+      throw new Error("Не удалось загрузить файл в Google Drive");
+    }
+
+    return {
+      fileId: res.data.id,
+      webViewLink: res.data.webViewLink || undefined,
+      webContentLink: res.data.webContentLink || undefined,
+    };
+  } catch (error: unknown) {
+    const err = error as { response?: { status?: number; data?: unknown }; message?: string };
+    
+    console.error("[Drive] Upload error status:", err.response?.status);
+    console.error("[Drive] Upload error data:", JSON.stringify(err.response?.data, null, 2));
+    console.error("[Drive] Used folderId:", folderId);
+    console.error("[Drive] Error message:", err.message || String(error));
+
+    throw error;
+  }
 }
 
