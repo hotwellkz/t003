@@ -13,6 +13,7 @@ import {
 } from "../models/videoJob";
 import { getChannelById } from "../models/channel";
 import { getSafeFileName } from "../utils/fileNameSanitizer";
+import * as admin from "firebase-admin";
 
 const router = Router();
 
@@ -354,11 +355,11 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
     }
 
     // Обновляем статус в Firestore
-    // ВАЖНО: Firestore не поддерживает undefined, используем null или удаляем поле
+    // Используем updateJob, который автоматически конвертирует undefined в null
     try {
       const updateResult = await updateJob(id, {
         status: "rejected",
-        localPath: null, // Используем null вместо undefined для Firestore
+        localPath: undefined, // updateJob конвертирует undefined в null для Firestore
       });
 
       if (!updateResult) {
