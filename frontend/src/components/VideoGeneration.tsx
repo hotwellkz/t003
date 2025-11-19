@@ -87,7 +87,7 @@ const VideoGeneration: React.FC = () => {
   const [customPromptText, setCustomPromptText] = useState<string>('')
 
   // Polling для обновления статусов задач
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     fetchChannels()
@@ -474,8 +474,7 @@ const VideoGeneration: React.FC = () => {
     if (!voiceIdeaText.trim() || !selectedChannel) return
 
     setGeneratingPrompt(true)
-    setRecognitionStatus('Обрабатываю...')
-    setRecognitionError('')
+    setRecordingError('')
 
     try {
       // Формируем объект idea из текста пользователя
@@ -516,11 +515,10 @@ const VideoGeneration: React.FC = () => {
       setStep(3)
       setSuccess('Промпт и название сгенерированы!')
     } catch (err: any) {
-      setRecognitionError('Не удалось сгенерировать промпт по этой идее. Попробуйте ещё раз или отредактируйте текст.')
+      setRecordingError('Не удалось сгенерировать промпт по этой идее. Попробуйте ещё раз или отредактируйте текст.')
       setError(err.message)
     } finally {
       setGeneratingPrompt(false)
-      setRecognitionStatus('')
     }
   }
 
@@ -657,7 +655,7 @@ const VideoGeneration: React.FC = () => {
         throw new Error(errorData.error || errorData.message || 'Ошибка загрузки в Google Drive')
       }
 
-      const data = await response.json()
+      await response.json()
       setSuccess('Видео успешно загружено в Google Drive!')
       
       // Обновляем список задач
@@ -1317,7 +1315,6 @@ const VideoGeneration: React.FC = () => {
                 {videoJobs.map((job) => {
                   const isActive = ['queued', 'sending', 'waiting_video', 'downloading', 'uploading'].includes(job.status)
                   const canApprove = job.status === 'ready'
-                  const canReject = job.status === 'ready' || job.status === 'error'
                   
                   return (
                     <div

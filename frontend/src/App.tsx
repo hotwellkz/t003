@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import './App.css'
 import VideoGeneration from './components/VideoGeneration'
 import ChannelSettings from './components/ChannelSettings'
