@@ -52,3 +52,14 @@ PORT=4000
    - Если автоматическое обновление не сработало, скопируйте `GDRIVE_REFRESH_TOKEN` из консоли в `.env` вручную
 5. Получите ID папки в Google Drive и укажите в `GDRIVE_FOLDER_ID`
 
+## Frontend (Vite)
+
+Создайте файл `frontend/.env` со значением:
+
+```
+VITE_API_URL=https://your-backend-api.example.com
+```
+
+В dev-режиме эта переменная опциональна (Vite использует proxy `/api → http://localhost:4000`).  
+В production (например, на Netlify) она обязательна — иначе запросы пойдут на домен фронтенда и вернут 404.
+

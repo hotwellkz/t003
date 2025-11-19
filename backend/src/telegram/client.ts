@@ -95,10 +95,18 @@ export async function getTelegramClient(): Promise<TelegramClient> {
       throw new Error("Авторизация не завершена. Проверьте введенные данные.");
     }
 
-    const newSession = client.session.save() as string;
-    console.log("\n=== ВАЖНО: Сохраните эту строку в .env ===\n");
-    console.log(`TELEGRAM_STRING_SESSION=${newSession}\n`);
-    console.log("✅ Авторизация в Telegram завершена успешно");
+    const sessionSaver = client.session.save as unknown;
+    const rawSession =
+      typeof sessionSaver === "function" ? (sessionSaver as () => unknown).call(client.session) : "";
+    const newSession = typeof rawSession === "string" ? rawSession : "";
+
+    if (newSession) {
+      console.log("\n=== ВАЖНО: Сохраните эту строку в .env ===\n");
+      console.log(`TELEGRAM_STRING_SESSION=${newSession}\n`);
+      console.log("✅ Авторизация в Telegram завершена успешно");
+    } else {
+      console.warn("⚠️  Не удалось сохранить TELEGRAM_STRING_SESSION автоматически. Скопируйте строку из консоли GramJS.");
+    }
   } else {
     console.log("✅ Telegram клиент авторизован");
   }

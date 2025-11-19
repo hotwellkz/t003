@@ -68,6 +68,40 @@ OPENAI_API_KEY=ваш_openai_api_key
 PORT=4000
 ```
 
+### Frontend (Vite)
+
+Во время разработки Vite проксирует запросы `/api/*` на `http://localhost:4000` согласно `vite.config.ts`.  
+Для production-сборок укажите публичный адрес backend API через переменную `VITE_API_URL` (файл `frontend/.env` или настройки хостинга):
+
+```env
+# Например: https://whitecoding-backend.example.com
+VITE_API_URL=https://your-backend-api.example.com
+```
+
+Если переменная не задана в production, фронт попытается отправлять запросы на тот же домен, что и Netlify-сайт, что приведёт к 404 (как произошло после первого деплоя).
+
+## Деплой фронтенда на Netlify
+
+1. Подготовьте публичный backend (Render, Railway, VPS и т.п.) и возьмите его URL.
+2. В Netlify → Site settings → Environment variables добавьте:
+   - `VITE_API_URL = https://<домен вашего backend'а>`
+3. Параметры билда:
+   - **Base directory:** `frontend`
+   - **Build command:** `npm run build`
+   - **Publish directory:** `dist`
+
+Если backend временно работает только локально, Netlify всё равно соберёт сайт, но запросы к `/api/*` будут падать. В таком случае приложение покажет сообщение «Не удалось подключиться к серверу. Проверьте настройки backend API.» — это сигнал, что нужно задеплоить backend или обновить `VITE_API_URL`.
+
+## Деплой backend на Google Cloud Run
+
+Инструкция находится в [`backend/DEPLOY_CLOUD_RUN.md`](backend/DEPLOY_CLOUD_RUN.md).  
+Кратко:
+
+1. `gcloud auth login && gcloud config set project <project-id>`
+2. `cd backend && gcloud run deploy whitecoding-backend --source . --region=europe-central2 --platform=managed --allow-unauthenticated`
+3. Скопируйте выданный URL (`https://whitecoding-backend-xxxxx-uc.a.run.app`) и пропишите его в `VITE_API_URL` на Netlify.
+4. Все секреты (Telegram, Google Drive, OpenAI) задаём через Variables & Secrets в Cloud Run. Локальный `.env` нужен только для разработки.
+
 #### Как получить Telegram API credentials:
 
 1. Перейдите на https://my.telegram.org/apps

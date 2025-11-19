@@ -69,7 +69,7 @@ export async function sendPromptToSyntx(
     try {
       // Пробуем скачать через опцию file
       await client.downloadMedia(videoMessage, {
-        file: filePath,
+        outputFile: filePath,
       });
 
       // Проверяем, что файл реально появился

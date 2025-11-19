@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import OpenAI from "openai";
-import FormData from "formdata-node";
+import { FormData, File } from "formdata-node";
 
 const router = Router();
 
@@ -76,7 +76,6 @@ router.post("/", upload.single("file"), async (req: Request, res: Response) => {
       // Используем FormData для создания multipart/form-data запроса
       // OpenAI SDK требует правильную сериализацию файла
       const formData = new FormData();
-      const { File } = await import("formdata-node");
       const audioFile = new File(
         [req.file.buffer],
         fileName,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import '../App.css'
+import { apiFetch, apiFetchJson, ApiError, resolveApiUrl } from '../lib/apiClient'
 
 type Language = 'ru' | 'kk' | 'en'
 
@@ -51,6 +52,8 @@ type Step = 1 | 2 | 3
 const VideoGeneration: React.FC = () => {
   const [step, setStep] = useState<Step>(1)
   const [channels, setChannels] = useState<Channel[]>([])
+  const [channelsLoading, setChannelsLoading] = useState(false)
+  const [channelsError, setChannelsError] = useState<string>('')
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [theme, setTheme] = useState<string>('')
   const [ideas, setIdeas] = useState<Idea[]>([])
@@ -59,7 +62,7 @@ const VideoGeneration: React.FC = () => {
   const [videoTitle, setVideoTitle] = useState<string>('')
   const [videoJobs, setVideoJobs] = useState<VideoJob[]>([])
   const [activeJobsCount, setActiveJobsCount] = useState(0)
-  const maxActiveJobs = 2
+  const [maxActiveJobs, setMaxActiveJobs] = useState(2)
   const [loading, setLoading] = useState(false)
   const [generatingIdeas, setGeneratingIdeas] = useState(false)
   const [generatingPrompt, setGeneratingPrompt] = useState(false)
@@ -140,14 +143,30 @@ const VideoGeneration: React.FC = () => {
     }
   }, [selectedChannel?.id])
 
+  const getConnectivityErrorMessage = (err: unknown) => {
+    if (err instanceof ApiError) {
+      if (err.isNetworkError || !err.status || err.status >= 500 || err.status === 404) {
+        return 'Не удалось подключиться к серверу. Проверьте настройки backend API.'
+      }
+      return err.message
+    }
+    if (err instanceof Error) {
+      return err.message
+    }
+    return 'Неизвестная ошибка'
+  }
+
   const fetchChannels = async () => {
+    setChannelsLoading(true)
+    setChannelsError('')
     try {
-      const response = await fetch('/api/channels')
-      if (!response.ok) throw new Error('Ошибка загрузки каналов')
-      const data = await response.json()
+      const data = await apiFetchJson<Channel[]>('/api/channels')
       setChannels(data)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      console.error('[channels] load error', err)
+      setChannelsError(getConnectivityErrorMessage(err))
+    } finally {
+      setChannelsLoading(false)
     }
   }
 
@@ -155,15 +174,24 @@ const VideoGeneration: React.FC = () => {
     if (!selectedChannel?.id) return
 
     try {
-      const response = await fetch(`/api/video-jobs?channelId=${selectedChannel.id}`)
-      if (!response.ok) {
-        console.error('[VideoJobs] Failed to fetch jobs')
-        return
+      const params = new URLSearchParams({ channelId: selectedChannel.id })
+      const data = await apiFetchJson<{
+        jobs?: VideoJob[]
+        activeCount?: number
+        maxActiveJobs?: number
+      }>(`/api/video-jobs?${params.toString()}`)
+
+      const normalizedJobs = (data.jobs || []).map((job) => ({
+        ...job,
+        previewUrl: job.previewUrl ? resolveApiUrl(job.previewUrl) : undefined,
+      }))
+
+      setVideoJobs(normalizedJobs)
+      setActiveJobsCount(data.activeCount ?? 0)
+      if (typeof data.maxActiveJobs === 'number') {
+        setMaxActiveJobs(data.maxActiveJobs)
       }
-      const data = await response.json()
-      setVideoJobs(data.jobs || [])
-      setActiveJobsCount(data.activeCount || 0)
-    } catch (err: any) {
+    } catch (err) {
       console.error('[VideoJobs] Error fetching jobs:', err)
     }
   }
@@ -191,7 +219,7 @@ const VideoGeneration: React.FC = () => {
     setIdeas([])
 
     try {
-      const response = await fetch('/api/ideas', {
+      const data = await apiFetchJson<{ ideas: Idea[] }>('/api/ideas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -200,13 +228,6 @@ const VideoGeneration: React.FC = () => {
           count: 5,
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Ошибка генерации идей')
-      }
-
-      const data = await response.json()
       setIdeas(data.ideas)
       setSuccess(`Сгенерировано ${data.ideas.length} идей`)
     } catch (err: any) {
@@ -223,7 +244,7 @@ const VideoGeneration: React.FC = () => {
     setSuccess('')
 
     try {
-      const response = await fetch('/api/prompts', {
+      const data = await apiFetchJson<{ veoPrompt: string; videoTitle: string }>('/api/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -234,13 +255,6 @@ const VideoGeneration: React.FC = () => {
           },
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Ошибка генерации промпта')
-      }
-
-      const data = await response.json()
       setVeoPrompt(data.veoPrompt)
       setVideoTitle(data.videoTitle)
       setStep(3)
@@ -264,7 +278,7 @@ const VideoGeneration: React.FC = () => {
     setSuccess('')
 
     try {
-      const response = await fetch('/api/prompts', {
+      const data = await apiFetchJson<{ veoPrompt: string; videoTitle: string }>('/api/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -275,13 +289,6 @@ const VideoGeneration: React.FC = () => {
           },
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Ошибка генерации промпта')
-      }
-
-      const data = await response.json()
       setVeoPrompt(data.veoPrompt)
       setVideoTitle(data.videoTitle)
       setSuccess('Промпт и название перегенерированы!')
@@ -431,17 +438,10 @@ const VideoGeneration: React.FC = () => {
       formData.append('file', audioBlob, fileName)
       
       // Отправляем на backend
-      const response = await fetch('/api/transcribe-idea', {
+      const data = await apiFetchJson<{ text: string }>('/api/transcribe-idea', {
         method: 'POST',
         body: formData,
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Ошибка сервера' }))
-        throw new Error(errorData.error || errorData.message || 'Ошибка транскрипции')
-      }
-      
-      const data = await response.json()
       const transcribedText = data.text || ''
       
       console.log('[voice] Transcription received:', transcribedText.substring(0, 100))
@@ -482,7 +482,7 @@ const VideoGeneration: React.FC = () => {
         ? voiceIdeaText.substring(0, 80) + '...' 
         : voiceIdeaText
       
-      const response = await fetch('/api/prompts', {
+      const data = await apiFetchJson<{ veoPrompt: string; videoTitle: string }>('/api/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -493,13 +493,6 @@ const VideoGeneration: React.FC = () => {
           },
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || errorData.message || 'Ошибка генерации промпта')
-      }
-
-      const data = await response.json()
       setVeoPrompt(data.veoPrompt)
       setVideoTitle(data.videoTitle)
       
@@ -552,7 +545,7 @@ const VideoGeneration: React.FC = () => {
       setGeneratingTitle(true)
       
       try {
-        const titleResponse = await fetch('/api/generate-title', {
+        const titleData = await apiFetchJson<{ title?: string }>('/api/generate-title', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -562,18 +555,13 @@ const VideoGeneration: React.FC = () => {
           }),
         })
 
-        if (titleResponse.ok) {
-          const titleData = await titleResponse.json()
-          const generatedTitle = titleData.title?.trim()
-          
-          if (generatedTitle) {
-            console.log('[Title] Generated title:', generatedTitle)
-            finalTitle = generatedTitle
-            setVideoTitle(generatedTitle)
-            setLastAutoGeneratedTitle(generatedTitle)
-          }
-        } else {
-          console.warn('[Title] Failed to generate title:', await titleResponse.text())
+        const generatedTitle = titleData.title?.trim()
+        
+        if (generatedTitle) {
+          console.log('[Title] Generated title:', generatedTitle)
+          finalTitle = generatedTitle
+          setVideoTitle(generatedTitle)
+          setLastAutoGeneratedTitle(generatedTitle)
         }
       } catch (err: any) {
         console.error('[Title] Error generating title:', err)
@@ -583,7 +571,7 @@ const VideoGeneration: React.FC = () => {
     }
 
     try {
-      const response = await fetch('/api/video-jobs', {
+      const data = await apiFetchJson<{ jobId: string; status: string; maxActiveJobs?: number }>('/api/video-jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -594,21 +582,6 @@ const VideoGeneration: React.FC = () => {
           videoTitle: finalTitle || undefined,
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        
-        if (errorData.error === 'MAX_ACTIVE_JOBS_REACHED') {
-          setError(`Уже генерируются ${maxActiveJobs} видео. Подождите, пока одно завершится.`)
-          // Обновляем список задач, чтобы получить актуальный счётчик
-          await fetchVideoJobs()
-        } else {
-          throw new Error(errorData.message || errorData.error || 'Ошибка генерации видео')
-        }
-        return
-      }
-
-      const data = await response.json()
       console.log('[VideoJob] Created job:', data.jobId)
       
       const trimmedPrompt = veoPrompt.trim()
@@ -630,7 +603,12 @@ const VideoGeneration: React.FC = () => {
       // Обновляем список задач
       await fetchVideoJobs()
     } catch (err: any) {
-      setError(err.message)
+      if (err instanceof ApiError && err.message === 'MAX_ACTIVE_JOBS_REACHED') {
+        setError(`Уже генерируются ${maxActiveJobs} видео. Подождите, пока одно завершится.`)
+        await fetchVideoJobs()
+      } else {
+        setError(err.message)
+      }
     } finally {
       setLoading(false)
     }
@@ -642,20 +620,13 @@ const VideoGeneration: React.FC = () => {
     setSuccess('')
 
     try {
-      const response = await fetch(`/api/video-jobs/${jobId}/approve`, {
+      await apiFetch(`/api/video-jobs/${jobId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           videoTitle: jobTitle?.trim() || undefined,
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || errorData.message || 'Ошибка загрузки в Google Drive')
-      }
-
-      await response.json()
       setSuccess('Видео успешно загружено в Google Drive!')
       
       // Обновляем список задач
@@ -673,12 +644,9 @@ const VideoGeneration: React.FC = () => {
     setSuccess('')
 
     try {
-      const response = await fetch(`/api/video-jobs/${jobId}/reject`, {
+      await apiFetch(`/api/video-jobs/${jobId}/reject`, {
         method: 'POST',
       })
-
-      if (!response.ok) throw new Error('Ошибка отклонения видео')
-
       setSuccess('Видео отклонено')
       
       // Обновляем список задач
@@ -750,6 +718,25 @@ const VideoGeneration: React.FC = () => {
         <div>
           <div className="input-group">
             <label>Выберите канал</label>
+            {channelsLoading && (
+              <p style={{ color: '#718096', marginTop: '0.5rem' }}>Загружаем каналы...</p>
+            )}
+            {channelsError && (
+              <div
+                className="error"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}
+              >
+                <span>{channelsError}</span>
+                <button
+                  className="button button-secondary"
+                  onClick={fetchChannels}
+                  disabled={channelsLoading}
+                  style={{ flexShrink: 0 }}
+                >
+                  {channelsLoading ? 'Повторяем...' : 'Повторить'}
+                </button>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
               {channels.map((channel) => (
                 <div
@@ -783,6 +770,9 @@ const VideoGeneration: React.FC = () => {
                 </div>
               ))}
             </div>
+            {channels.length === 0 && !channelsLoading && !channelsError && (
+              <p style={{ color: '#a0aec0', marginTop: '0.5rem' }}>Каналы не найдены</p>
+            )}
           </div>
         </div>
       )}

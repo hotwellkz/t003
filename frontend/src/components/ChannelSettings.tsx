@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import '../App.css'
+import { apiFetch, apiFetchJson, ApiError } from '../lib/apiClient'
 
 type Language = 'ru' | 'kk' | 'en'
 
@@ -32,14 +33,24 @@ const ChannelSettings: React.FC = () => {
     fetchChannels()
   }, [])
 
+  const getErrorMessage = (err: unknown) => {
+    if (err instanceof ApiError) {
+      if (err.isNetworkError || !err.status || err.status >= 500 || err.status === 404) {
+        return 'Не удалось подключиться к серверу. Проверьте настройки backend API.'
+      }
+      return err.message
+    }
+    if (err instanceof Error) return err.message
+    return 'Неизвестная ошибка'
+  }
+
   const fetchChannels = async () => {
     try {
-      const response = await fetch('/api/channels')
-      if (!response.ok) throw new Error('Ошибка загрузки каналов')
-      const data = await response.json()
+      const data = await apiFetchJson<Channel[]>('/api/channels')
       setChannels(data)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      console.error('[ChannelSettings] Failed to load channels', err)
+      setError(getErrorMessage(err))
     }
   }
 
@@ -79,22 +90,18 @@ const ChannelSettings: React.FC = () => {
       const url = editingId ? `/api/channels/${editingId}` : '/api/channels'
       const method = editingId ? 'PUT' : 'POST'
 
-      const response = await fetch(url, {
+      await apiFetchJson(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Ошибка сохранения канала')
-      }
-
       resetForm()
       setSuccess(editingId ? 'Канал успешно обновлён!' : 'Канал успешно создан!')
       fetchChannels()
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      console.error('[ChannelSettings] Failed to save channel', err)
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -108,16 +115,14 @@ const ChannelSettings: React.FC = () => {
     setSuccess('')
 
     try {
-      const response = await fetch(`/api/channels/${id}`, {
+      await apiFetch(`/api/channels/${id}`, {
         method: 'DELETE',
       })
-
-      if (!response.ok) throw new Error('Ошибка удаления канала')
-
       setSuccess('Канал успешно удалён!')
       fetchChannels()
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      console.error('[ChannelSettings] Failed to delete channel', err)
+      setError(getErrorMessage(err))
     } finally {
       setLoading(false)
     }

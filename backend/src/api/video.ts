@@ -60,9 +60,9 @@ router.post("/generate", async (req: Request, res: Response) => {
         videoTitle: job.videoTitle,
       });
     } catch (error: any) {
-      // Обновляем статус на failed
+      // Обновляем статус на error
       updateJob(job.id, {
-        status: "failed",
+        status: "error",
       });
 
       console.error("Ошибка генерации видео:", error);
@@ -280,7 +280,7 @@ router.post("/jobs/:id/regenerate", async (req: Request, res: Response) => {
       });
     } catch (error: any) {
       updateJob(newJob.id, {
-        status: "failed",
+        status: "error",
       });
 
       console.error("Ошибка перегенерации видео:", error);
