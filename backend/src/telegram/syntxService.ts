@@ -3,7 +3,10 @@ import * as fs from "fs";
 import * as path from "path";
 import { getTelegramClient } from "./client";
 
-export async function sendPromptToSyntx(prompt: string): Promise<string> {
+export async function sendPromptToSyntx(
+  prompt: string,
+  customFileName?: string
+): Promise<string> {
   const client = await getTelegramClient();
   const botUsername = process.env.SYNTX_BOT_USERNAME || "syntxaibot";
 
@@ -46,9 +49,9 @@ export async function sendPromptToSyntx(prompt: string): Promise<string> {
     
     console.log(`[Syntx] Download directory: ${downloadDir}`);
 
-    // Генерируем имя файла
+    // Генерируем имя файла (используем customFileName если указан, иначе дефолтное)
     const timestamp = Date.now();
-    const fileName = `syntx_${timestamp}.mp4`;
+    const fileName = customFileName || `syntx_${timestamp}.mp4`;
     const filePath = path.join(downloadDir, fileName);
     
     console.log(`[Syntx] Target file path: ${filePath}`);

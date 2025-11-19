@@ -9,25 +9,29 @@ import {
   updateJob,
   deleteJob,
 } from "../models/videoJob";
+import { getSafeFileName } from "../utils/fileNameSanitizer";
 
 const router = Router();
 
 // POST /api/video/generate
 router.post("/generate", async (req: Request, res: Response) => {
   try {
-    const { veoprompt, channelId, ideaText } = req.body;
+    const { veoprompt, channelId, ideaText, videoTitle } = req.body;
 
     if (!veoprompt) {
       return res.status(400).json({ error: "Требуется veoprompt" });
     }
 
-    // Создаём job
-    const job = createJob(veoprompt, channelId, ideaText);
-    console.log(`[VideoJob] Created job ${job.id}`);
+    // Создаём job с videoTitle
+    const job = createJob(veoprompt, channelId, ideaText, videoTitle);
+    console.log(`[VideoJob] Created job ${job.id}, videoTitle: ${videoTitle || "не указано"}`);
 
     try {
-      // Отправляем промпт в Syntx AI
-      const localPath = await sendPromptToSyntx(veoprompt);
+      // Формируем безопасное имя файла из videoTitle
+      const safeFileName = videoTitle ? getSafeFileName(videoTitle) : undefined;
+      
+      // Отправляем промпт в Syntx AI с указанием имени файла
+      const localPath = await sendPromptToSyntx(veoprompt, safeFileName);
 
       // Обновляем job
       const updatedJob = updateJob(job.id, {
@@ -53,6 +57,7 @@ router.post("/generate", async (req: Request, res: Response) => {
         jobId: job.id,
         status: "ready",
         previewUrl: `/api/video/preview/${job.id}`,
+        videoTitle: job.videoTitle,
       });
     } catch (error: any) {
       // Обновляем статус на failed
@@ -124,6 +129,7 @@ router.get("/preview/:id", (req: Request, res: Response) => {
 router.post("/jobs/:id/approve", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const { videoTitle } = req.body; // Принимаем обновлённое название из запроса
     const job = getJob(id);
 
     if (!job) {
@@ -152,12 +158,22 @@ router.post("/jobs/:id/approve", async (req: Request, res: Response) => {
     const fileStat = fs.statSync(job.localPath);
     console.log(`[VideoJob] Approving job ${id}, file: ${job.localPath}, size: ${fileStat.size} bytes`);
 
+    // Обновляем title в job, если передан новый
+    const finalTitle = videoTitle && videoTitle.trim() ? videoTitle.trim() : job.videoTitle;
+    if (finalTitle && finalTitle !== job.videoTitle) {
+      updateJob(id, { videoTitle: finalTitle });
+      console.log(`[VideoJob] Updated title for job ${id}: ${finalTitle}`);
+    }
+
     // Обновляем статус на uploading
     updateJob(id, { status: "uploading" });
 
     try {
-      // Генерируем имя файла
-      const fileName = `video_${job.id}_${Date.now()}.mp4`;
+      // Генерируем имя файла из videoTitle или используем дефолтное
+      // getSafeFileName уже добавляет расширение .mp4
+      const fileName = finalTitle
+        ? getSafeFileName(finalTitle)
+        : `video_${job.id}_${Date.now()}.mp4`;
       console.log(`[VideoJob] Uploading to Google Drive: ${fileName}`);
 
       // Загружаем в Google Drive
@@ -237,16 +253,20 @@ router.post("/jobs/:id/regenerate", async (req: Request, res: Response) => {
     // Можно использовать обновлённый промпт из body или старый
     const veoprompt = req.body.veoprompt || oldJob.prompt;
 
-    // Создаём новый job
+    // Создаём новый job с сохранением videoTitle
     const newJob = createJob(
       veoprompt,
       oldJob.channelId,
-      oldJob.ideaText
+      oldJob.ideaText,
+      oldJob.videoTitle
     );
 
     try {
+      // Формируем безопасное имя файла из videoTitle
+      const safeFileName = newJob.videoTitle ? getSafeFileName(newJob.videoTitle) : undefined;
+      
       // Генерируем новое видео
-      const localPath = await sendPromptToSyntx(veoprompt);
+      const localPath = await sendPromptToSyntx(veoprompt, safeFileName);
 
       updateJob(newJob.id, {
         status: "ready",

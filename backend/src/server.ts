@@ -5,6 +5,9 @@ import channelsRouter from "./api/channels";
 import ideasRouter from "./api/ideas";
 import promptsRouter from "./api/prompts";
 import videoRouter from "./api/video";
+import videoJobsRouter from "./api/videoJobs";
+import transcribeRouter from "./api/transcribe";
+import titleRouter from "./api/title";
 import { getTelegramClient } from "./telegram/client";
 
 // Загружаем переменные окружения
@@ -27,6 +30,9 @@ app.use("/api/channels", channelsRouter);
 app.use("/api/ideas", ideasRouter);
 app.use("/api/prompts", promptsRouter);
 app.use("/api/video", videoRouter);
+app.use("/api/video-jobs", videoJobsRouter);
+app.use("/api/transcribe-idea", transcribeRouter);
+app.use("/api/generate-title", titleRouter);
 
 // Health check
 app.get("/health", (req, res) => {

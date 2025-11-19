@@ -1,16 +1,23 @@
 import { Router, Request, Response } from "express";
 import { getChannelById } from "../models/channel";
+import { generateVeoPrompt } from "../services/openaiService";
 
 const router = Router();
 
-// POST /api/prompts/veo
-router.post("/veo", (req: Request, res: Response) => {
+// POST /api/prompts
+router.post("/", async (req: Request, res: Response) => {
   try {
-    const { channelId, ideaText } = req.body;
+    const { channelId, idea } = req.body;
 
-    if (!channelId || !ideaText) {
+    if (!channelId || !idea) {
       return res.status(400).json({
-        error: "Требуются поля: channelId, ideaText",
+        error: "Требуются поля: channelId, idea (с полями title и description)",
+      });
+    }
+
+    if (!idea.title || !idea.description) {
+      return res.status(400).json({
+        error: "Идея должна содержать поля title и description",
       });
     }
 
@@ -19,16 +26,27 @@ router.post("/veo", (req: Request, res: Response) => {
       return res.status(404).json({ error: "Канал не найден" });
     }
 
-    // Подставляем ideaText в шаблон
-    let prompt = channel.veoPromptTemplate.replace(/{{idea}}/g, ideaText);
+    // Проверяем наличие OpenAI API ключа
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({
+        error: "OpenAI API ключ не настроен. Установите OPENAI_API_KEY в .env",
+      });
+    }
 
-    // Можно добавить дополнительную обработку через LLM для улучшения промпта
-    // Здесь пока просто возвращаем готовый промпт
+    // Генерируем промпт и название через OpenAI
+    const result = await generateVeoPrompt(channel, {
+      title: idea.title,
+      description: idea.description,
+    });
 
-    res.json({ prompt });
-  } catch (error) {
-    console.error("Ошибка генерации промпта:", error);
-    res.status(500).json({ error: "Ошибка при генерации промпта" });
+    res.json({
+      veoPrompt: result.veoPrompt,
+      videoTitle: result.videoTitle,
+    });
+  } catch (error: unknown) {
+    console.error("[API] Ошибка генерации промпта:", error);
+    const message = error instanceof Error ? error.message : "Ошибка при генерации промпта";
+    res.status(500).json({ error: message });
   }
 });
 
