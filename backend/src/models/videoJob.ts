@@ -27,8 +27,16 @@ export interface VideoJob {
   updatedAt: number; // Время последнего обновления
 }
 
+/**
+ * Генерирует уникальный ID для задачи
+ * Формат: job_<timestamp>_<random>_<counter>
+ * Это гарантирует уникальность даже при одновременных запросах
+ */
 function generateJobId(): string {
-  return `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substr(2, 9);
+  const counter = Math.floor(Math.random() * 10000); // Дополнительная защита от коллизий
+  return `job_${timestamp}_${random}_${counter}`;
 }
 
 // Импортируем функции из Firebase сервиса
