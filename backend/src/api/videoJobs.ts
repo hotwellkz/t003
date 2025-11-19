@@ -320,8 +320,9 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
  * ВАЖНО: Этот маршрут должен быть определён ПЕРЕД общим маршрутом /:id
  */
 router.post("/:id/reject", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  
   try {
-    const { id } = req.params;
     console.log(`[VideoJob] Reject request received for job ${id}`);
 
     const job = await getJob(id);
@@ -334,39 +335,58 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[VideoJob] Rejecting job ${id}, current status: ${job.status}`);
+    console.log(`[VideoJob] Rejecting job ${id}, current status: ${job.status}, localPath: ${job.localPath || 'не указан'}`);
 
     // Удаляем локальный файл, если есть
-    if (job.localPath && fs.existsSync(job.localPath)) {
+    if (job.localPath) {
       try {
-        fs.unlinkSync(job.localPath);
-        console.log(`[VideoJob] ✅ Deleted local file for rejected job ${id}: ${job.localPath}`);
-      } catch (unlinkError) {
-        console.error(`[VideoJob] ⚠️  Error deleting file for job ${id}:`, unlinkError);
+        if (fs.existsSync(job.localPath)) {
+          fs.unlinkSync(job.localPath);
+          console.log(`[VideoJob] ✅ Deleted local file for rejected job ${id}: ${job.localPath}`);
+        } else {
+          console.log(`[VideoJob] ⚠️  Local file path specified but file does not exist: ${job.localPath}`);
+        }
+      } catch (unlinkError: any) {
+        console.error(`[VideoJob] ⚠️  Error deleting file for job ${id}:`, unlinkError?.message || unlinkError);
         // Не прерываем выполнение, если файл не удалось удалить
+        // На Cloud Run файлы могут быть уже удалены или недоступны
       }
-    } else if (job.localPath) {
-      console.log(`[VideoJob] ⚠️  Local file path specified but file does not exist: ${job.localPath}`);
     }
 
-    await updateJob(id, {
-      status: "rejected",
-      localPath: undefined,
-    });
+    // Обновляем статус в Firestore
+    // ВАЖНО: Firestore не поддерживает undefined, используем null или удаляем поле
+    try {
+      const updateResult = await updateJob(id, {
+        status: "rejected",
+        localPath: null, // Используем null вместо undefined для Firestore
+      });
 
-    console.log(`[VideoJob] ✅ Job ${id} successfully rejected`);
+      if (!updateResult) {
+        console.error(`[VideoJob] ⚠️  updateJob returned null for job ${id}`);
+        return res.status(404).json({
+          error: "Job не найден в базе данных",
+          jobId: id,
+        });
+      }
+
+      console.log(`[VideoJob] ✅ Job ${id} successfully rejected, new status: ${updateResult.status}`);
+    } catch (updateError: any) {
+      console.error(`[VideoJob] ❌ Error updating job ${id} in Firestore:`, updateError);
+      throw new Error(`Ошибка обновления задачи в базе данных: ${updateError?.message || String(updateError)}`);
+    }
 
     res.json({ 
       status: "rejected",
       jobId: id,
     });
   } catch (error: any) {
-    console.error(`[VideoJob] ❌ Error rejecting job ${req.params.id}:`, error);
+    console.error(`[VideoJob] ❌ Error rejecting job ${id}:`, error);
+    console.error(`[VideoJob] Error stack:`, error?.stack);
     const errorMessage = error?.message || error?.toString() || "Неизвестная ошибка";
     res.status(500).json({
       error: "Ошибка при отклонении видео",
       message: errorMessage,
-      jobId: req.params.id,
+      jobId: id,
     });
   }
 });

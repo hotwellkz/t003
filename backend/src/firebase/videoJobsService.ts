@@ -68,22 +68,40 @@ export async function updateJob(id: string, updates: Partial<VideoJob>): Promise
     
     const doc = await jobRef.get();
     if (!doc.exists) {
+      console.error(`[Firebase] Job ${id} does not exist in Firestore`);
       return null;
     }
 
     // Удаляем id из updates, если он там есть
     const { id: _, ...updateData } = updates as any;
+    
+    // Firestore не поддерживает undefined, конвертируем в null
+    for (const key in updateData) {
+      if (updateData[key] === undefined) {
+        updateData[key] = null;
+      }
+    }
+    
     updateData.updatedAt = Date.now();
+    
+    console.log(`[Firebase] Updating job ${id} with data:`, JSON.stringify(updateData, null, 2));
     
     await jobRef.update(updateData);
 
     const updatedDoc = await jobRef.get();
-    return {
+    const updatedJob = {
       id: updatedDoc.id,
       ...updatedDoc.data(),
     } as VideoJob;
+    
+    console.log(`[Firebase] ✅ Job ${id} updated successfully, new status: ${updatedJob.status}`);
+    return updatedJob;
   } catch (error: unknown) {
-    console.error(`[Firebase] Error updating job ${id}:`, error);
+    console.error(`[Firebase] ❌ Error updating job ${id}:`, error);
+    if (error instanceof Error) {
+      console.error(`[Firebase] Error message: ${error.message}`);
+      console.error(`[Firebase] Error stack: ${error.stack}`);
+    }
     throw new Error(`Ошибка обновления задачи: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
