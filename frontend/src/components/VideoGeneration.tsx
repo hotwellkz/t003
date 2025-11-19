@@ -737,34 +737,20 @@ const VideoGeneration: React.FC = () => {
                 </button>
               </div>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+            <div className="channel-grid">
               {channels.map((channel) => (
                 <div
                   key={channel.id}
+                  className="channel-card"
                   onClick={() => handleChannelSelect(channel.id)}
-                  style={{
-                    padding: '1rem',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#667eea'
-                    e.currentTarget.style.transform = 'translateY(-2px)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = '#e2e8f0'
-                    e.currentTarget.style.transform = 'translateY(0)'
-                  }}
                 >
-                  <h3 style={{ margin: '0 0 0.5rem 0' }}>{channel.name}</h3>
+                  <h3 className="channel-card__title">{channel.name}</h3>
                   {channel.description && (
-                    <p style={{ fontSize: '0.875rem', color: '#718096', margin: '0 0 0.5rem 0' }}>
+                    <p className="channel-card__description">
                       {channel.description}
                     </p>
                   )}
-                  <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>
+                  <div className="channel-card__meta">
                     {channel.language.toUpperCase()} • {channel.durationSeconds}с
                   </div>
                 </div>
@@ -1301,7 +1287,7 @@ const VideoGeneration: React.FC = () => {
             {videoJobs.length === 0 ? (
               <p style={{ color: '#718096', marginTop: '0.75rem' }}>Задачи ещё не создавались.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1rem' }}>
+              <div className="job-list">
                 {videoJobs.map((job) => {
                   const isActive = ['queued', 'sending', 'waiting_video', 'downloading', 'uploading'].includes(job.status)
                   const canApprove = job.status === 'ready'
@@ -1309,63 +1295,52 @@ const VideoGeneration: React.FC = () => {
                   return (
                     <div
                       key={job.id}
-                      style={{
-                        border: '2px solid #e2e8f0',
-                        borderRadius: '8px',
-                        padding: '1.5rem',
-                        background: isActive ? '#f7fafc' : 'white',
-                      }}
+                      className={`job-card ${isActive ? 'job-card--active' : ''}`}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
-                        <div style={{ flex: 1 }}>
-                          <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem' }}>
+                      <div className="job-card__header">
+                        <div className="job-card__info">
+                          <h4>
                             {job.videoTitle || job.prompt.substring(0, 60) + (job.prompt.length > 60 ? '...' : '')}
                           </h4>
                           {job.videoTitle && (
-                            <p style={{ margin: '0 0 0.5rem 0', color: '#718096', fontSize: '0.875rem' }}>
+                            <p className="job-card__prompt">
                               {job.prompt.substring(0, 100) + (job.prompt.length > 100 ? '...' : '')}
                             </p>
                           )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div className="job-card__status">
                             <span
-                              style={{
-                                display: 'inline-block',
-                                width: '8px',
-                                height: '8px',
-                                borderRadius: '50%',
-                                background: getStatusColor(job.status),
-                              }}
+                              className="job-card__status-dot"
+                              style={{ background: getStatusColor(job.status) }}
                             />
-                            <span style={{ fontSize: '0.875rem', color: getStatusColor(job.status), fontWeight: '500' }}>
+                            <span style={{ color: getStatusColor(job.status) }}>
                               {getStatusLabel(job.status)}
                             </span>
                             {job.errorMessage && (
-                              <span style={{ fontSize: '0.875rem', color: '#f56565', marginLeft: '0.5rem' }}>
+                              <span className="job-card__error">
                                 {job.errorMessage}
                               </span>
                             )}
                           </div>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#a0aec0' }}>
+                        <div className="job-card__timestamp">
                           {new Date(job.createdAt).toLocaleString('ru-RU')}
                         </div>
                       </div>
 
                       {/* Превью видео для готовых задач */}
                       {job.status === 'ready' && job.previewUrl && (
-                        <div style={{ marginTop: '1rem' }}>
+                        <div className="job-card__preview">
                           <video
                             src={job.previewUrl}
                             controls
                             className="video-preview"
-                            style={{ width: '100%', maxWidth: '600px', borderRadius: '8px' }}
                           />
                         </div>
                       )}
 
                       {/* Действия для готовых задач */}
                       {canApprove && (
-                        <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div className="job-card__actions">
                           <button
                             className="button button-success"
                             onClick={() => handleApproveJob(job.id, job.videoTitle)}
@@ -1385,12 +1360,11 @@ const VideoGeneration: React.FC = () => {
 
                       {/* Ссылка на Google Drive для загруженных */}
                       {job.status === 'uploaded' && job.webViewLink && (
-                        <div style={{ marginTop: '1rem' }}>
+                        <div className="job-card__link">
                           <a
                             href={job.webViewLink}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ color: '#667eea', textDecoration: 'underline' }}
                           >
                             Открыть в Google Drive
                           </a>

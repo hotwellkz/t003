@@ -251,52 +251,54 @@ const ChannelSettings: React.FC = () => {
           {channels.length === 0 ? (
             <p style={{ color: '#718096' }}>Каналы не найдены</p>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Имя</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Язык</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Длительность</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'right' }}>Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {channels.map((channel) => (
-                  <tr key={channel.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                    <td style={{ padding: '0.75rem' }}>
-                      <strong>{channel.name}</strong>
-                      {channel.description && (
-                        <div style={{ fontSize: '0.875rem', color: '#718096', marginTop: '0.25rem' }}>
-                          {channel.description}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '0.75rem' }}>{channel.language.toUpperCase()}</td>
-                    <td style={{ padding: '0.75rem' }}>{channel.durationSeconds}с</td>
-                    <td style={{ padding: '0.75rem', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                        <button
-                          className="button"
-                          onClick={() => handleEdit(channel)}
-                          disabled={loading}
-                          style={{ fontSize: '0.875rem', padding: '0.5rem 1rem' }}
-                        >
-                          Редактировать
-                        </button>
-                        <button
-                          className="button button-danger"
-                          onClick={() => handleDelete(channel.id)}
-                          disabled={loading}
-                          style={{ fontSize: '0.875rem', padding: '0.5rem 1rem' }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </td>
+            <div className="table-scroll">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Имя</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Язык</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Длительность</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'right' }}>Действия</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {channels.map((channel) => (
+                    <tr key={channel.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '0.75rem' }}>
+                        <strong>{channel.name}</strong>
+                        {channel.description && (
+                          <div style={{ fontSize: '0.875rem', color: '#718096', marginTop: '0.25rem' }}>
+                            {channel.description}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>{channel.language.toUpperCase()}</td>
+                      <td style={{ padding: '0.75rem' }}>{channel.durationSeconds}с</td>
+                      <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                          <button
+                            className="button"
+                            onClick={() => handleEdit(channel)}
+                            disabled={loading}
+                            style={{ fontSize: '0.875rem', padding: '0.5rem 1rem' }}
+                          >
+                            Редактировать
+                          </button>
+                          <button
+                            className="button button-danger"
+                            onClick={() => handleDelete(channel.id)}
+                            disabled={loading}
+                            style={{ fontSize: '0.875rem', padding: '0.5rem 1rem' }}
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
