@@ -28,27 +28,44 @@ async function processVideoGeneration(jobId: string): Promise<void> {
     console.error(`[VideoJob] Job ${jobId} not found for processing`);
     return;
   }
+  
+  console.log(`[VideoJob] 🚀 Starting video generation for job ${jobId} (generationId: ${job.generationId || 'none'}), prompt: "${job.prompt.substring(0, 50)}..."`);
 
   try {
     // Статус: sending - отправка промпта
     await updateJob(jobId, { status: "sending" });
-    console.log(`[VideoJob] Job ${jobId}: sending prompt to Syntx`);
+    console.log(`[VideoJob] Job ${jobId} (generationId: ${job.generationId || 'none'}): sending prompt to Syntx`);
 
-    // Формируем безопасное имя файла из videoTitle
-    const safeFileName = job.videoTitle ? getSafeFileName(job.videoTitle) : undefined;
+    // Формируем безопасное имя файла из videoTitle + job.id для уникальности
+    // КРИТИЧНО: Добавляем job.id в имя файла, чтобы при параллельной генерации
+    // с одинаковым videoTitle файлы не перезаписывали друг друга
+    let safeFileName: string | undefined;
+    if (job.videoTitle) {
+      const baseFileName = getSafeFileName(job.videoTitle);
+      // Добавляем короткий хеш из job.id для уникальности
+      const jobIdHash = job.id.split('_').pop()?.substring(0, 8) || job.id.substring(0, 8);
+      safeFileName = `${baseFileName.replace('.mp4', '')}_${jobIdHash}.mp4`;
+    } else {
+      // Если нет videoTitle, используем job.id для уникальности
+      const jobIdHash = job.id.split('_').pop()?.substring(0, 8) || job.id.substring(0, 8);
+      safeFileName = `video_${jobIdHash}_${Date.now()}.mp4`;
+    }
+
+    console.log(`[VideoJob] Job ${jobId} (generationId: ${job.generationId}): using filename "${safeFileName}"`);
 
     // Статус: waiting_video - ожидание видео
     updateJob(jobId, { status: "waiting_video" });
-    console.log(`[VideoJob] Job ${jobId}: waiting for video from Syntx`);
+    console.log(`[VideoJob] Job ${jobId} (generationId: ${job.generationId}): waiting for video from Syntx`);
 
     // Отправляем промпт в Syntx AI и ждём видео
     // Используем существующий requestMessageId, если он есть (для повторных попыток)
     const existingRequestMessageId = job.telegramRequestMessageId;
+    console.log(`[VideoJob] Job ${jobId} (generationId: ${job.generationId}): sending prompt to Syntx, existingRequestMessageId: ${existingRequestMessageId || 'none'}`);
     const syntxResult = await sendPromptToSyntx(job.prompt, safeFileName, existingRequestMessageId);
 
     // Сохраняем requestMessageId для связи с ответом
     await updateJob(jobId, { telegramRequestMessageId: syntxResult.requestMessageId });
-    console.log(`[VideoJob] Job ${jobId}: saved telegramRequestMessageId: ${syntxResult.requestMessageId}`);
+    console.log(`[VideoJob] Job ${jobId} (generationId: ${job.generationId}): saved telegramRequestMessageId: ${syntxResult.requestMessageId}`);
 
     // Статус: downloading - скачивание
     await updateJob(jobId, { status: "downloading" });
@@ -60,7 +77,7 @@ async function processVideoGeneration(jobId: string): Promise<void> {
     }
 
     const fileStat = fs.statSync(syntxResult.localPath);
-    console.log(`[VideoJob] Job ${jobId}: file verified, size: ${fileStat.size} bytes`);
+    console.log(`[VideoJob] Job ${jobId} (generationId: ${job.generationId}): file verified, size: ${fileStat.size} bytes, path: ${syntxResult.localPath}`);
 
     // Статус: ready - готово
     await updateJob(jobId, {
@@ -68,7 +85,8 @@ async function processVideoGeneration(jobId: string): Promise<void> {
       localPath: syntxResult.localPath,
     });
 
-    console.log(`[VideoJob] Job ${jobId} completed successfully`);
+    console.log(`[VideoJob] ✅ Job ${jobId} (generationId: ${job.generationId}) completed successfully`);
+    console.log(`[VideoJob] Job ${jobId} final state: status=ready, localPath=${syntxResult.localPath}, telegramRequestMessageId=${syntxResult.requestMessageId}`);
   } catch (error: any) {
     console.error(`[VideoJob] Job ${jobId} error:`, error);
     const errorMessage = error?.message || error?.toString() || "Неизвестная ошибка";
@@ -145,6 +163,12 @@ router.get("/", async (req: Request, res: Response) => {
 
     const jobs = await getAllJobs(channelIdStr);
     
+    // Логируем для отладки параллельной генерации
+    console.log(`[VideoJob] GET /api/video-jobs: found ${jobs.length} jobs for channelId=${channelIdStr || 'all'}`);
+    jobs.forEach((job) => {
+      console.log(`[VideoJob] Job ${job.id} (generationId: ${job.generationId || 'none'}): status=${job.status}, localPath=${job.localPath || 'none'}, prompt="${job.prompt.substring(0, 30)}..."`);
+    });
+    
     // Сортируем по createdAt (новые сверху) и ограничиваем последними 20
     const sortedJobs = jobs
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -165,6 +189,7 @@ router.get("/", async (req: Request, res: Response) => {
         driveFileId: job.driveFileId,
         webViewLink: job.webViewLink,
         webContentLink: job.webContentLink,
+        generationId: job.generationId, // Добавляем для отладки на фронтенде
       }));
 
     res.json({
