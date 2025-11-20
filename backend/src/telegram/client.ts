@@ -114,3 +114,15 @@ export async function getTelegramClient(): Promise<TelegramClient> {
   return client;
 }
 
+if (require.main === module) {
+  getTelegramClient()
+    .then(() => {
+      console.log("✅ Telegram клиент готов. Если это была интерактивная авторизация, скопируйте TELEGRAM_STRING_SESSION из вывода выше.");
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error("❌ Ошибка при инициализации Telegram клиента:", error);
+      process.exit(1);
+    });
+}
+

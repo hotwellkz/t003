@@ -10,6 +10,7 @@ import {
   getAllJobs,
   countActiveJobs,
   VideoJobStatus,
+  deleteJobCascade,
 } from "../models/videoJob";
 import { getChannelById } from "../models/channel";
 import { getSafeFileName } from "../utils/fileNameSanitizer";
@@ -322,7 +323,7 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
  */
 router.post("/:id/reject", async (req: Request, res: Response) => {
   const { id } = req.params;
-  
+
   try {
     console.log(`[VideoJob] Reject request received for job ${id}`);
 
@@ -330,55 +331,42 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
 
     if (!job) {
       console.error(`[VideoJob] Job ${id} not found for rejection`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: "Job не найден",
         jobId: id,
       });
     }
 
-    console.log(`[VideoJob] Rejecting job ${id}, current status: ${job.status}, localPath: ${job.localPath || 'не указан'}`);
+    console.log(
+      `[VideoJob] Rejecting job ${id}, current status: ${job.status}, localPath: ${job.localPath || "не указан"}`
+    );
 
-    // Удаляем локальный файл, если есть
-    if (job.localPath) {
-      try {
-        if (fs.existsSync(job.localPath)) {
-          fs.unlinkSync(job.localPath);
-          console.log(`[VideoJob] ✅ Deleted local file for rejected job ${id}: ${job.localPath}`);
-        } else {
-          console.log(`[VideoJob] ⚠️  Local file path specified but file does not exist: ${job.localPath}`);
-        }
-      } catch (unlinkError: any) {
-        console.error(`[VideoJob] ⚠️  Error deleting file for job ${id}:`, unlinkError?.message || unlinkError);
-        // Не прерываем выполнение, если файл не удалось удалить
-        // На Cloud Run файлы могут быть уже удалены или недоступны
+    const removedFiles: string[] = [];
+    const fileCandidates = collectAllFilePaths(job);
+    for (const candidate of fileCandidates) {
+      const deleted = deleteLocalFileSafe(candidate);
+      if (deleted) {
+        removedFiles.push(candidate);
       }
     }
 
-    // Обновляем статус в Firestore
-    // Используем updateJob, который автоматически конвертирует undefined в null
-    try {
-      const updateResult = await updateJob(id, {
-        status: "rejected",
-        localPath: undefined, // updateJob конвертирует undefined в null для Firestore
+    const deletedFromDb = await deleteJobCascade(id);
+    if (!deletedFromDb) {
+      console.error(`[VideoJob] ⚠️  deleteJobCascade returned false for job ${id}`);
+      return res.status(404).json({
+        error: "Job не найден в базе данных",
+        jobId: id,
       });
-
-      if (!updateResult) {
-        console.error(`[VideoJob] ⚠️  updateJob returned null for job ${id}`);
-        return res.status(404).json({
-          error: "Job не найден в базе данных",
-          jobId: id,
-        });
-      }
-
-      console.log(`[VideoJob] ✅ Job ${id} successfully rejected, new status: ${updateResult.status}`);
-    } catch (updateError: any) {
-      console.error(`[VideoJob] ❌ Error updating job ${id} in Firestore:`, updateError);
-      throw new Error(`Ошибка обновления задачи в базе данных: ${updateError?.message || String(updateError)}`);
     }
 
-    res.json({ 
-      status: "rejected",
+    console.log(
+      `[VideoJob] ✅ Job ${id} deleted completely (doc + subcollections + files: ${removedFiles.length})`
+    );
+
+    res.json({
+      status: "deleted",
       jobId: id,
+      deletedFiles: removedFiles,
     });
   } catch (error: any) {
     console.error(`[VideoJob] ❌ Error rejecting job ${id}:`, error);
@@ -391,6 +379,40 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
     });
   }
 });
+
+function collectAllFilePaths(job: any): string[] {
+  const paths = new Set<string>();
+
+  if (job.localPath) paths.add(job.localPath);
+  if (job.previewPath) paths.add(job.previewPath);
+  if (job.thumbnailPath) paths.add(job.thumbnailPath);
+  if (Array.isArray(job.storagePaths)) {
+    job.storagePaths.forEach((p: string | undefined) => p && paths.add(p));
+  }
+
+  return Array.from(paths);
+}
+
+function deleteLocalFileSafe(filePath?: string): boolean {
+  if (!filePath) {
+    return false;
+  }
+
+  try {
+    const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(filePath);
+    if (!fs.existsSync(absolutePath)) {
+      console.log(`[VideoJob] ⚠️  File does not exist, skip delete: ${absolutePath}`);
+      return false;
+    }
+
+    fs.unlinkSync(absolutePath);
+    console.log(`[VideoJob] 🧹 Deleted file: ${absolutePath}`);
+    return true;
+  } catch (error) {
+    console.error(`[VideoJob] ⚠️  Failed to delete file ${filePath}:`, error);
+    return false;
+  }
+}
 
 export default router;
 

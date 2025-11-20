@@ -18,6 +18,9 @@ export async function createJob(job: VideoJob): Promise<VideoJob> {
       ideaText: job.ideaText || null,
       videoTitle: job.videoTitle || null,
       localPath: job.localPath || null,
+      previewPath: job.previewPath || null,
+      thumbnailPath: job.thumbnailPath || null,
+      storagePaths: job.storagePaths || null,
       status: job.status,
       driveFileId: job.driveFileId || null,
       webViewLink: job.webViewLink || null,
@@ -125,6 +128,40 @@ export async function deleteJob(id: string): Promise<boolean> {
   } catch (error: unknown) {
     console.error(`[Firebase] Error deleting job ${id}:`, error);
     throw new Error(`Ошибка удаления задачи: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function deleteDocumentRecursive(docRef: FirebaseFirestore.DocumentReference): Promise<void> {
+  const subcollections = await docRef.listCollections();
+  for (const subcollection of subcollections) {
+    const snapshot = await subcollection.get();
+    for (const subDoc of snapshot.docs) {
+      await deleteDocumentRecursive(subDoc.ref);
+    }
+  }
+  await docRef.delete();
+}
+
+/**
+ * Полностью удалить задачу и все вложенные коллекции
+ */
+export async function deleteJobCascade(id: string): Promise<boolean> {
+  try {
+    const db = getFirestore();
+    const jobRef = db.collection(COLLECTION_NAME).doc(id);
+    const doc = await jobRef.get();
+
+    if (!doc.exists) {
+      console.warn(`[Firebase] deleteJobCascade: job ${id} not found`);
+      return false;
+    }
+
+    await deleteDocumentRecursive(jobRef);
+    console.log(`[Firebase] 🗑️ VideoJob ${id} and all nested data deleted`);
+    return true;
+  } catch (error: unknown) {
+    console.error(`[Firebase] Error cascading delete for job ${id}:`, error);
+    throw new Error(`Ошибка каскадного удаления задачи: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

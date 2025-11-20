@@ -17,6 +17,9 @@ export interface VideoJob {
   ideaText?: string;
   videoTitle?: string; // Название видео для именования файла
   localPath?: string; // Путь к локальному файлу
+  previewPath?: string; // Путь к превью (если генерируется отдельно)
+  thumbnailPath?: string; // Путь к обложке/thumbnail
+  storagePaths?: string[]; // Дополнительные пути файлов (например, промежуточные версии)
   status: VideoJobStatus;
   driveFileId?: string;
   webViewLink?: string;
@@ -45,6 +48,7 @@ import {
   getJob as getJobFromFirestore,
   updateJob as updateJobInFirestore,
   deleteJob as deleteJobFromFirestore,
+  deleteJobCascade as deleteJobCascadeFromFirestore,
   getAllJobs as getAllJobsFromFirestore,
   getActiveJobs as getActiveJobsFromFirestore,
   countActiveJobs as countActiveJobsFromFirestore,
@@ -79,6 +83,7 @@ export async function createJob(
 export { getJobFromFirestore as getJob };
 export { updateJobInFirestore as updateJob };
 export { deleteJobFromFirestore as deleteJob };
+export { deleteJobCascadeFromFirestore as deleteJobCascade };
 export { getAllJobsFromFirestore as getAllJobs };
 export { getActiveJobsFromFirestore as getActiveJobs };
 export { countActiveJobsFromFirestore as countActiveJobs };
