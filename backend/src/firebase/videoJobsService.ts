@@ -24,7 +24,6 @@ export async function createJob(job: VideoJob): Promise<VideoJob> {
       webContentLink: job.webContentLink || null,
       errorMessage: job.errorMessage || null,
       telegramRequestMessageId: job.telegramRequestMessageId || null,
-      generationId: job.generationId || null,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
     });

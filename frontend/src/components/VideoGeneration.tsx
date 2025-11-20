@@ -46,7 +46,6 @@ interface VideoJob {
   driveFileId?: string
   webViewLink?: string
   webContentLink?: string
-  generationId?: string // Уникальный идентификатор генерации (для отладки)
 }
 
 type Step = 1 | 2 | 3
@@ -189,12 +188,6 @@ const VideoGeneration: React.FC = () => {
         ...job,
         previewUrl: job.previewUrl ? resolveApiUrl(job.previewUrl) : undefined,
       }))
-
-      // Логируем для отладки параллельной генерации
-      console.log(`[VideoJobs] Fetched ${normalizedJobs.length} jobs for channel ${selectedChannel.id}`)
-      normalizedJobs.forEach((job) => {
-        console.log(`[VideoJobs] Job ${job.id}: status=${job.status}, previewUrl=${job.previewUrl || 'none'}, prompt="${job.prompt.substring(0, 30)}..."`)
-      })
 
       setVideoJobs(normalizedJobs)
       setActiveJobsCount(data.activeCount ?? 0)
@@ -1496,7 +1489,6 @@ const VideoGeneration: React.FC = () => {
                       {job.status === 'ready' && job.previewUrl && (
                         <div className="job-card__preview">
                           <video
-                            key={`video-${job.id}`} // Уникальный key для видео, чтобы React правильно обновлял src
                             src={job.previewUrl}
                             controls
                             className="video-preview"

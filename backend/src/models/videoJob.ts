@@ -23,7 +23,6 @@ export interface VideoJob {
   webContentLink?: string;
   errorMessage?: string; // Сообщение об ошибке
   telegramRequestMessageId?: number; // ID сообщения, отправленного в Telegram (для связи с ответом)
-  generationId?: string; // Уникальный идентификатор генерации (для отладки и связи запрос-ответ)
   createdAt: number;
   updatedAt: number; // Время последнего обновления
 }
@@ -38,16 +37,6 @@ function generateJobId(): string {
   const random = Math.random().toString(36).substr(2, 9);
   const counter = Math.floor(Math.random() * 10000); // Дополнительная защита от коллизий
   return `job_${timestamp}_${random}_${counter}`;
-}
-
-/**
- * Генерирует уникальный generationId для связи запроса с ответом
- * Формат: gen_<timestamp>_<random>
- */
-function generateGenerationId(): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substr(2, 12);
-  return `gen_${timestamp}_${random}`;
 }
 
 // Импортируем функции из Firebase сервиса
@@ -74,7 +63,6 @@ export async function createJob(
   const now = Date.now();
   const job: VideoJob = {
     id: generateJobId(),
-    generationId: generateGenerationId(), // Уникальный ID для связи запроса с ответом
     prompt,
     channelId,
     channelName,
@@ -84,7 +72,6 @@ export async function createJob(
     createdAt: now,
     updatedAt: now,
   };
-  console.log(`[VideoJob] Created job ${job.id} with generationId ${job.generationId}, prompt: "${prompt.substring(0, 50)}..."`);
   return await createJobInFirestore(job);
 }
 
